@@ -1,5 +1,7 @@
 # FPV Channel Planner
 
+**Live app:** <https://fl0ridaman.github.io/fpv-channel-planner/>. Open it in Chrome or Edge on Android, macOS or Windows, then choose *Install app*.
+
 Offline-capable planner for deconflicting analog (and HDZero) FPV video channels across multiple teams. It accounts for each drone's VTX table, power, antennas and goggles, plus team positions, terrain and outside emitters.
 
 It is a Progressive Web App (PWA), so one codebase runs on **macOS, Windows and Android**. There is no build step and no backend. All mission data stays on the device.
@@ -14,7 +16,7 @@ python3 -m http.server 8765
 
 then open <http://localhost:8765>. In Chrome or Edge, use *Install app* in the address bar to get a standalone window.
 
-**Android:** service workers and installation need HTTPS. Host this folder on any HTTPS static host (an internal server, GitHub Pages, etc.), open it in Chrome on the phone, then use *⋮ → Add to Home screen / Install app*. If you need a sideloadable APK later, the folder can be wrapped with Capacitor without code changes.
+**Android:** open the live app link above in Chrome, then *⋮ → Install app* (or *Add to Home screen*). Installation needs HTTPS, which GitHub Pages provides. If you need a sideloadable APK later, the folder can be wrapped with Capacitor without code changes.
 
 **Offline:** open the app once while online. Then pan the map to the mission area and use *☰ → Download map + terrain for offline…*. After that the planner, the map tiles and the terrain all work without a connection.
 
