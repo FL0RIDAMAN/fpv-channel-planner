@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>FPV Channel Planner</title>
+  <meta name="theme-color" content="#111418">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="vendor/leaflet/leaflet.css">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <header id="topbar">
+    <div class="brand">FPV Channel Planner</div>
+    <input id="missionName" class="mission-name" aria-label="Mission name">
+    <select id="siteSel" aria-label="Site"></select>
+    <div class="spacer"></div>
+    <span id="offlineBadge" class="badge" hidden>offline</span>
+    <button id="btnSolve" class="primary">Solve channels</button>
+    <button id="btnHelp" aria-label="User manual" title="User manual" onclick="window.open('manual.html', '_blank')">?</button>
+    <button id="btnMenu" aria-label="Menu">☰</button>
+    <div id="menu" class="menu" hidden>
+      <button data-act="new">New mission</button>
+      <button data-act="example">Load example (this site)</button>
+      <button data-act="open">Open mission file…</button>
+      <button data-act="save">Save mission file</button>
+      <hr>
+      <button data-act="card">Channel card (print)</button>
+      <button data-act="cli">Flight controller commands (BF / INAV / ArduPilot)</button>
+      <hr>
+      <button data-act="cache">Download map + terrain for offline…</button>
+      <button data-act="manual">User manual</button>
+      <button data-act="help">How it works (summary)</button>
+    </div>
+    <input type="file" id="fileOpen" accept=".json,application/json" hidden>
+  </header>
+  <main id="main">
+    <section id="panel">
+      <nav id="tabs">
+        <button data-tab="teams" class="on">Teams &amp; Aircraft</button>
+        <button data-tab="results">Plan</button>
+        <button data-tab="env">Environment</button>
+        <button data-tab="equipment">Goggles</button>
+      </nav>
+      <div id="tabBody"></div>
+    </section>
+    <section id="mapWrap">
+      <div id="map"></div>
+      <div id="mapHint" class="map-hint" hidden></div>
+      <button id="btnPanelToggle" class="panel-toggle">Panel</button>
+    </section>
+  </main>
+  <dialog id="dlg"><form method="dialog" id="dlgForm"><div id="dlgBody"></div><menu id="dlgMenu"><button value="close">Close</button></menu></form></dialog>
+  <div id="printArea"></div>
+  <script src="vendor/leaflet/leaflet.js"></script>
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

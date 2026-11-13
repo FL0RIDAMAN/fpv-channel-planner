@@ -1,0 +1,521 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>FPV Planner Manual</title>
+  <meta name="theme-color" content="#111418">
+  <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/manual.css">
+</head>
+<body>
+<div class="top"><b>FPV Channel Planner — User Manual</b><a href="index.html">← Back to planner</a><a href="#" onclick="window.print();return false">Print</a></div>
+<div class="wrap">
+<nav class="toc" aria-label="Contents">
+  <ol>
+    <li><a href="#quickstart">Quick start</a></li>
+    <li><a href="#install">Installing &amp; offline use</a></li>
+    <li><a href="#concepts">Key concepts</a></li>
+    <li><a href="#teams">Teams &amp; Aircraft tab</a></li>
+    <li><a href="#pull-table">Uploading VTX tables</a></li>
+    <li><a href="#goggles">Goggles tab</a></li>
+    <li><a href="#environment">Environment tab</a></li>
+    <li><a href="#solve">Solving</a></li>
+    <li><a href="#reading">Reading the Plan tab</a></li>
+    <li><a href="#export">Exports</a></li>
+    <li><a href="#firmware">Flight controller setup</a>
+      <ol>
+        <li><a href="#betaflight">Betaflight</a></li>
+        <li><a href="#inav">INAV</a></li>
+        <li><a href="#ardupilot">ArduPilot</a></li>
+        <li><a href="#fw-compare">Side-by-side</a></li>
+      </ol>
+    </li>
+    <li><a href="#field">Field procedure</a></li>
+    <li><a href="#trouble">Troubleshooting</a></li>
+    <li><a href="#model">How the model works</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+  </ol>
+</nav>
+<main>
+
+<h1>User Manual</h1>
+<p class="muted">Covers the planner, plus how to put its channel plan onto Betaflight, INAV and ArduPilot aircraft.</p>
+
+<div class="warn"><b>Planning estimates, not guarantees.</b> The planner predicts interference from published-style figures and terrain data. Always confirm on site with a goggle or spectrum scan before launch. Transmit only on frequencies and power levels you are authorized to use at that location.</div>
+
+<!-- ============================================================ -->
+<h2 id="quickstart">1. Quick start</h2>
+<p>The planner opens blank. You enter each team and its aircraft yourself.</p>
+<ol class="steps">
+  <li><b>Pick the site</b> in the top bar (MWTC, Washington DC, or Custom). The map moves there.</li>
+  <li><b>+ Add first team</b>. Give it a name and its <b>launch point</b>: type an MGRS grid or lat/long, or press <i>📍 Pick on map</i> and tap the spot. Then set the flying radius, flying height, and (optionally) start and end times.</li>
+  <li><b>+ Add aircraft</b> inside the team card. Enter the <b>callsign</b>, <b>pilot name</b>, flight controller and goggles.</li>
+  <li>Pick the <b>VTX model</b>, then <b>⬆ Upload VTX table file</b> (or <i>Paste table</i>) with the table pulled from that quad (<a href="#pull-table">how</a>).</li>
+  <li>Set <b>Takeoff / landing</b> power and <b>In flight</b> power.</li>
+  <li>Press <b>+ Add aircraft</b> again for the next one. It copies the previous aircraft's setup, so you usually only change the callsign, pilot and table.</li>
+  <li>Repeat for each team. Add known Wi-Fi or other emitters on the <b>Environment</b> tab.</li>
+  <li>Press <b>Solve channels</b> and review the <b>Plan</b> tab. Fix anything red (<a href="#reading">what to do</a>).</li>
+  <li><b>☰ → Flight controller commands</b>: apply the settings to each aircraft (<a href="#firmware">per firmware</a>). <b>☰ → Channel card (print)</b> for each team. <b>☰ → Save mission file</b> to share.</li>
+</ol>
+<div class="tip">Want to look around first? <b>☰ → Load example (this site)</b> loads a complete 12-aircraft, 3-team plan. <b>☰ → New mission</b> clears it again.</div>
+
+<!-- ============================================================ -->
+<h2 id="install">2. Installing &amp; offline use</h2>
+<h3>Mac and Windows</h3>
+<p>Open the planner's address in Chrome or Edge. Click the <i>Install</i> icon in the address bar (or browser menu → <i>Install FPV Channel Planner</i>). It then opens in its own window like a normal app.</p>
+<p>To run it from a local copy of the folder:</p>
+<pre><code>python3 -m http.server 8765</code></pre>
+<p>…then browse to <code>http://localhost:8765</code>. (Opening <code>index.html</code> directly as a file will not enable offline mode.)</p>
+<h3>Android</h3>
+<p>The app must be served over <b>HTTPS</b> (any static web host). Open it in Chrome → <b>⋮ → Install app</b> (or <i>Add to Home screen</i>). It runs full-screen and offline.</p>
+<h3>Preparing for no connectivity</h3>
+<ol class="steps">
+  <li>Open the app once while online. The program itself is now stored on the device.</li>
+  <li>Pan and zoom the map to cover the mission area (include all teams plus a margin).</li>
+  <li><b>☰ → Download map + terrain for offline…</b>, pick a basemap, press <i>Download</i>. Repeat for each area or basemap you want.</li>
+  <li>Test it: switch the device to airplane mode and reopen the app. An <span style="background:var(--warn-bg);padding:0 6px;border-radius:8px">offline</span> badge shows in the top bar.</li>
+</ol>
+<p>Your missions are saved automatically on the device. Use <b>Save mission file</b> to move a plan between devices (AirDrop, USB, email, etc.) and <b>Open mission file…</b> to load it.</p>
+<div class="tip">If terrain did not download for an area, the planner still works but treats those paths as clear line-of-sight (worst case). The Teams and Environment tabs say when this is happening.</div>
+
+<!-- ============================================================ -->
+<h2 id="concepts">3. Key concepts</h2>
+<table>
+  <tr><th>Term</th><th>What it means for planning</th></tr>
+  <tr><td>Channel spacing</td><td>An analog video signal is about 18–20 MHz wide. Pilots in the same area want at least ~37 MHz between channels (Raceband spacing); closer than that and you see lines or a second picture.</td></tr>
+  <tr><td>Near–far</td><td>A strong VTX close to your goggles can swamp you even on a different channel, because receiver filters only reject so much. The closer and more powerful the other drone, the more spacing you need. This is the main reason distance and terrain matter.</td></tr>
+  <tr><td>Intermodulation (IMD)</td><td>Two strong signals mix inside your receiver and create a ghost at 2×f₁ − f₂. Three channels can each be well spaced and still have one VTX's ghost land on a third pilot. The solver checks every pair.</td></tr>
+  <tr><td>Terrain shielding</td><td>A ridge between two teams can block 20–60 dB of interference, which often lets them reuse channels. Open valleys and urban rooftops do the opposite.</td></tr>
+  <tr><td>Polarization</td><td>RHCP vs LHCP antennas reject each other by roughly 15 dB on a clear line of sight (much less once the signal bounces). Giving neighbouring teams opposite polarization is a cheap extra margin.</td></tr>
+  <tr><td>Time windows</td><td>Teams that are never airborne at the same time cannot interfere, so they can share channels.</td></tr>
+  <tr><td>HDZero (digital)</td><td>Uses the same 5.8 GHz channels as analog but a wider signal (~27 MHz). It interferes with analog and vice versa, so plan it together.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="teams">4. Teams &amp; Aircraft tab</h2>
+<p>Everything about who is flying what, and where, is entered here. Each team is a card, and its aircraft are listed inside it.</p>
+<h3>Team fields</h3>
+<table>
+  <tr><th>Field</th><th>Guidance</th></tr>
+  <tr><td>Name, colour</td><td>Shown on the map, the plan and the channel card.</td></tr>
+  <tr><td>Launch point</td><td>Where the team's pilots stand and their aircraft take off. Enter it one of three ways (<a href="#coords">formats</a>): type an <b>MGRS grid</b>, type a <b>lat/long</b>, or press <b>📍 Map</b> and tap the map. It's shown as MGRS with lat/long underneath. You can also drag the team's marker on the map. A team with no launch point is left out of the plan.</td></tr>
+  <tr><td>Flying radius</td><td>Furthest the drones go from the pilots. A bigger radius means a weaker own signal at the edge, and a bigger area that can interfere with other teams.</td></tr>
+  <tr><td>Flying height AGL</td><td>Typical height above ground. Higher drones see over more terrain, which helps your own link but spreads interference further.</td></tr>
+  <tr><td>Start / End time</td><td>When the team is airborne. Leave blank for "the whole mission". Teams whose windows don't overlap can share channels.</td></tr>
+  <tr><td><i>Advanced:</i> Takeoff spacing</td><td>Closest a teammate takes off or lands (at <b>takeoff power</b>) to another pilot's goggles. Default 20 m.</td></tr>
+  <tr><td><i>Advanced:</i> In-flight spacing</td><td>Closest a teammate's airborne drone (at <b>flight power</b>) gets to another pilot's goggles. Default 100 m.</td></tr>
+  <tr><td><i>Advanced:</i> Pilot antenna height</td><td>≈1.5 m standing. More on a mast or vehicle.</td></tr>
+</table>
+<h3 id="coords">Coordinate formats</h3>
+<p>Any of these work in a launch point or emitter location field. A green line under the field shows the conversion as you type, and red explains what's wrong.</p>
+<table>
+  <tr><th>Format</th><th>Examples</th></tr>
+  <tr><td>MGRS (any precision)</td><td><code>11S KC 79808 48321</code> (1 m) · <code>11SKC7980848321</code> · <code>11S KC 7980 4832</code> (10 m) · <code>11S KC 798 483</code> (100 m). Coarser grids are placed at the centre of the square.</td></tr>
+  <tr><td>Decimal lat, long</td><td><code>38.356, -119.520</code> · <code>38.356 -119.52</code> · <code>38.356N 119.52W</code> · <code>N38.356 W119.52</code></td></tr>
+  <tr><td>Degrees-minutes(-seconds)</td><td><code>38°21'21.6"N 119°31'12"W</code> · <code>38 21.36 N 119 31.2 W</code> · <code>38 21 21.6 -119 31 12</code></td></tr>
+</table>
+<p>Without N/S/E/W letters the order must be latitude then longitude. All coordinates are WGS84. MGRS covers 80°S–84°N; polar (UPS) grids aren't supported.</p>
+<p>The box at the bottom-left of the map shows the MGRS grid and lat/long under the pointer. On touch screens it shows the map centre, marked with a crosshair. Tap or click the box to copy the grid. Tap a team's marker to see its launch point.</p>
+
+<p>The map draws a line between each pair of teams showing the distance and the worst-case terrain effect: <span style="color:#c62828">red solid = clear line-of-sight</span>, <span style="color:#b06a00">amber dashed = partly shielded</span>, <span style="color:#1a7f37">green dashed = well shielded (&gt;20 dB)</span>. The <b>Team separation</b> table at the bottom of the tab shows both directions.</p>
+
+<h3 id="aircraft">Aircraft</h3>
+<p>Each aircraft is a single row: callsign, pilot, channel, takeoff → flight power, table status, and margin once solved. Tap the row to open it, and press <i>Done</i> to close it. Table status shows as <span style="background:var(--tip-bg);padding:0 6px;border-radius:8px">table ✓</span> once uploaded, or as <i>template</i> or <i>copied table</i> until then.</p>
+<table>
+  <tr><th>Field</th><th>Guidance</th></tr>
+  <tr><td>Callsign</td><td>Filled in automatically (A1, A2…). Change it to your naming.</td></tr>
+  <tr><td>Pilot name</td><td>Who flies it. Shown on the plan, the channel card and the exported commands.</td></tr>
+  <tr><td>Flight controller</td><td>Betaflight, INAV or ArduPilot. The solver only offers channels that firmware can command, and models the power it will actually use. A power marked <b>*</b> is one the firmware rounds.</td></tr>
+  <tr><td>Goggles / receiver</td><td>What the pilot watches this aircraft on (edit the list on the <a href="#goggles">Goggles tab</a>).</td></tr>
+  <tr><td>VTX model</td><td>Starting template for this quad's VTX: brand, type, control protocol and an approximate table. Choose "Other — Unlisted" if yours isn't there.</td></tr>
+  <tr><td>⬆ Upload VTX table file / Paste table</td><td>Replaces the template with this quad's real table. See <a href="#pull-table">section 5</a>.</td></tr>
+  <tr><td><b>Takeoff / landing</b> power</td><td>VTX power while on the ground and near the launch point, usually the lowest level. The planner uses it for the teammate takeoff spacing case.</td></tr>
+  <tr><td><b>In flight</b> power</td><td>VTX power once airborne, usually much higher. The planner uses it for the pilot's own link and for interference to everyone else. With "Also adjust in-flight VTX power" on, the solver may raise or lower it. Tick <i>Lock flight power</i> to stop that.</td></tr>
+</table>
+<p><b>Advanced</b> (inside each aircraft):</p>
+<table>
+  <tr><td>Channel / Lock channel</td><td>Pin a fixed channel. Use this for aircraft that can't be reconfigured.</td></tr>
+  <tr><td>Include in plan</td><td>Untick to leave the aircraft out of this plan without deleting it.</td></tr>
+  <tr><td>Power switch RC channel</td><td>If a radio switch changes takeoff → flight power, enter its RC channel (5 = AUX1 … 16). The exported commands then include the switch setup (<a href="#power-switch">details per firmware</a>).</td></tr>
+  <tr><td>Team</td><td>Move the aircraft to another team.</td></tr>
+  <tr><td>VTX type / control protocol / signal width / tolerance</td><td>Analog or HDZero; SmartAudio, Tramp or MSP (used for INAV/ArduPilot power levels); 18 MHz analog, 27 MHz HDZero (17 in narrow mode); how far off-frequency this VTX model may be.</td></tr>
+  <tr><td>Measured freq. offset</td><td>If you've measured this particular VTX off-frequency, enter it here. The planner widens its guard band to match.</td></tr>
+  <tr><td>Max range</td><td>Overrides the team radius for this aircraft.</td></tr>
+  <tr><td>Antenna gain / polarization</td><td>For the VTX antenna and the goggle antenna. RHCP vs LHCP between neighbouring teams adds about 15 dB of rejection on line-of-sight.</td></tr>
+</table>
+<p><b>+ Add aircraft</b> copies the previous aircraft in the team: VTX, table, powers, firmware, goggles and antennas. Only the callsign and pilot are cleared. A copied table is marked <i>copied table</i> until you upload that quad's own.</p>
+
+<!-- ============================================================ -->
+<h2 id="pull-table">5. Uploading VTX tables</h2>
+<p>A VTX table lists the exact frequencies and power levels a quad's VTX is configured for. Upload one for every aircraft. The presets are approximate templates only.</p>
+<h3>From a Betaflight quad</h3>
+<ol class="steps">
+  <li>Connect the quad to Betaflight Configurator → <b>CLI</b> tab.</li>
+  <li>Type <code>vtxtable</code> and press Enter.</li>
+  <li>Either copy all the lines it prints (they start with <code>vtxtable</code>), then use the aircraft's <b>Paste table</b>.
+    <br>Or save them to a <code>.txt</code> file and use <b>⬆ Upload VTX table file</b>.
+    <br>A VTX table <code>.json</code> file saved from Configurator's <i>Video Transmitter</i> tab also works.</li>
+  <li>The aircraft row now shows <b>table ✓</b> and the upload date.</li>
+</ol>
+<h3>From an INAV or ArduPilot quad</h3>
+<p>These firmwares have no <code>vtxtable</code> command; their channel tables are built in (see <a href="#inav">INAV</a> and <a href="#ardupilot">ArduPilot</a>). The planner already restricts these aircraft to channels the firmware supports. What you still need is the VTX's <b>power levels</b>:</p>
+<ul>
+  <li>Pick the closest VTX model template, and check its power levels against the VTX's label or manual.</li>
+  <li>If they differ, use <b>Paste table</b> with a table you write yourself. Copy the band lines from the example below and change the power lines:</li>
+</ul>
+<pre><code>vtxtable bands 5
+vtxtable channels 8
+vtxtable band 1 BOSCAM_A A FACTORY 5865 5845 5825 5805 5785 5765 5745 5725
+vtxtable band 2 BOSCAM_B B FACTORY 5733 5752 5771 5790 5809 5828 5847 5866
+vtxtable band 3 BOSCAM_E E FACTORY 5705 5685 5665 5645 5885 5905 5925 5945
+vtxtable band 4 FATSHARK F FACTORY 5740 5760 5780 5800 5820 5840 5860 5880
+vtxtable band 5 RACEBAND R FACTORY 5658 5695 5732 5769 5806 5843 5880 5917
+vtxtable powerlevels 4
+vtxtable powervalues 25 200 500 1000
+vtxtable powerlabels 25 200 500 1W</code></pre>
+<p>Power labels are read as mW (<code>25</code>, <code>200</code>) or W (<code>1W</code>, <code>1.6W</code>). Labels like <code>PIT</code> are kept but never planned as a flight power. A frequency of <code>0</code> disables that channel.</p>
+
+<!-- ============================================================ -->
+<h2 id="goggles">6. Goggles tab</h2>
+<p>Each receiver has a tunable range, filter quality (selectivity), noise figure, IIP3 (resistance to intermodulation), and the signal quality it needs for a clean picture (required SIR and SNR). The figures are estimates. If a receiver performs better or worse in the field, adjust them. Raising <i>Required SIR</i> makes the plan more conservative. Use <b>+ Receiver</b> for goggles that aren't listed.</p>
+
+<!-- ============================================================ -->
+<h2 id="environment">7. Environment tab</h2>
+<ul>
+  <li><b>Noise rise</b> — raises the noise floor for city RF clutter (DC defaults to 6 dB).</li>
+  <li><b>Extra loss when blocked</b> — terrain data is bare earth (no trees or buildings). Leave at 0 to be conservative, or add 5–15 dB for dense forest or city blocks if you want credit for them.</li>
+  <li><b>Fade margin</b> — safety margin taken off every pilot's own link (default 6 dB).</li>
+  <li><b>External emitters</b> — anything on or near your band you don't control: Wi-Fi access points (5.8 GHz Wi-Fi channels 149–165 overlap the A, B and F bands), other units' drones, fixed video links. Add one, then give it a location (MGRS, lat/long, or <i>📍 Map</i>) and set its frequency, bandwidth and power (EIRP). Common Wi-Fi APs are 20–30 dBm EIRP.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="solve">8. Solving</h2>
+<p>Press <b>Solve channels</b> (top bar or Plan tab). In a second or two the solver tries thousands of channel combinations from every VTX table and picks the one where the <b>worst</b> pilot has the most margin.</p>
+<ul>
+  <li><b>Also adjust in-flight VTX power</b>: raises the <i>in-flight</i> power on links that are too weak, and lowers it everywhere else, while keeping every link at least 3 dB above its threshold. Lower power reduces interference and detectability. Takeoff power is never changed; aircraft with <i>Lock flight power</i> are left alone.</li>
+  <li><b>Allowed bands</b> — untick bands you can't use (e.g. L band if your goggles can't tune it, or bands outside your frequency authorization).</li>
+  <li>Locked drones keep their channel and/or power; the others are planned around them.</li>
+</ul>
+<p>Solving starts from random points, so two runs can give different (equally good) plans. Re-solve after any change.</p>
+
+<!-- ============================================================ -->
+<h2 id="reading">9. Reading the Plan tab</h2>
+<p><b>Worst link margin</b> is the headline: <span style="color:#1a7f37">≥ 3 dB OK</span>, <span style="color:#b06a00">0–3 dB marginal</span>, <span style="color:#c62828">&lt; 0 conflict</span>.</p>
+<table>
+  <tr><th>Column</th><th>Meaning</th></tr>
+  <tr><td>Sig dBm</td><td>Your own drone's signal at the edge of the team circle, after fade margin.</td></tr>
+  <tr><td>SNR</td><td>Signal vs background noise. Low = range-limited.</td></tr>
+  <tr><td>SIR</td><td>Signal vs all interference combined (other drones, IMD ghosts, external emitters).</td></tr>
+  <tr><td>Margin</td><td>How far above the "picture starts breaking up" point you are, combining noise and interference.</td></tr>
+  <tr><td>Limited by</td><td>The main cause when margin is low: a specific drone (with channel spacing), an IMD pair, an external emitter, or range/noise.</td></tr>
+</table>
+<p>The <b>spectrum strip</b> shows every drone's channel and width, coloured by team (red outline = in conflict). The <b>Pairwise C/I</b> grid shows, for each pilot (row), how strong each other drone (column) is after filtering — red cells are the problem pairs.</p>
+<h3>Fixing a conflict</h3>
+<table>
+  <tr><th>Limited by…</th><th>Try</th></tr>
+  <tr><td>A teammate's drone <i>at takeoff</i></td><td>Lower that drone's takeoff power, or launch further apart (increase <i>Takeoff spacing</i> only if you really will).</td></tr>
+  <tr><td>A teammate's drone (in flight)</td><td>Increase <i>In-flight spacing</i> (keep airborne drones away from the pilots), fewer drones per team, or split the team into time windows.</td></tr>
+  <tr><td>Another team's drone</td><td>Move a team behind terrain (watch the link colours), shrink radii, stagger time windows, give the teams opposite polarization, or lower power on the nearer team.</td></tr>
+  <tr><td>IMD A+B</td><td>Re-solve; lock fewer drones; restrict bands so the solver uses a wider spread; lower power on the two named drones.</td></tr>
+  <tr><td>External emitter</td><td>Ban the overlapping band (e.g. untick A/B/F near Wi-Fi), or move the team away.</td></tr>
+  <tr><td>Range/noise</td><td>Raise in-flight VTX power, shrink the radius, use a higher-gain receive antenna, or raise the pilot antenna.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="export">10. Exports</h2>
+<ul>
+  <li><b>Channel card (print)</b>: one table per team with callsign, pilot, VTX, channel, MHz, takeoff → flight power, flight controller, goggles, margin, and a check-box column. Print it or "Save as PDF".</li>
+  <li><b>Flight controller commands</b> — choose <i>All drones</i> or one drone. Commands are grouped by firmware (Betaflight CLI, INAV CLI, ArduPilot parameter file). Each sets the channel and the <b>takeoff</b> power, and either sets up the power switch or notes the flight power to switch to after takeoff. <i>Download</i> for a single ArduPilot drone saves a <code>.param</code> file. Apply them as described in <a href="#firmware">section 11</a>.</li>
+  <li><b>Save mission file</b> — the whole plan, including your equipment library, as <code>.fpvplan.json</code>.</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="firmware">11. Flight controller setup</h2>
+<p>All three firmwares can set the VTX channel and power for you, provided the VTX control wire is connected and configured. The common pieces:</p>
+<ul>
+  <li><b>SmartAudio</b> (TBS, Rush, Foxeer, GEPRC, most analog VTXs) and <b>IRC Tramp</b> use one wire from the VTX to a UART <b>TX</b> pin on the flight controller.</li>
+  <li><b>HDZero</b> is controlled over <b>MSP</b> on the same UART as its DisplayPort OSD (follow HDZero's wiring guide for your FC).</li>
+  <li>A VTX with no control wire must be set with its button (and its LED/OSD menu). Mark it <i>Lock channel</i> and <i>Lock power</i> in the planner, set to whatever the button gives you, or set it to the solved channel by hand.</li>
+</ul>
+<h3 id="power-switch">Takeoff power → flight power</h3>
+<p>The exported settings boot the VTX at its <b>takeoff power</b>. Getting to <b>flight power</b> once airborne is done one of three ways:</p>
+<ol class="steps">
+  <li><b>Radio switch (recommended):</b> enter the switch's RC channel under the aircraft's <i>Advanced → Power switch RC channel</i>. The export then adds the switch setup for that firmware (details in each section below).</li>
+  <li><b>OSD or radio menu:</b> the pilot raises the power from the goggles/OSD VTX menu or a radio Lua script after takeoff. The export lists the level to choose.</li>
+  <li><b>Ground station:</b> ArduPilot: change <code>VTX_POWER</code> from the GCS or OSD parameter menu.</li>
+</ol>
+<p>Whichever you use, the planner's numbers assume the pilot really switches. A drone left at takeoff power is weaker on its own link. A drone that takes off at flight power hits nearby teammates much harder than planned.</p>
+<div class="warn"><b>Radio-side VTX control can overwrite the plan.</b> ExpressLRS's <i>VTX Administrator</i> and TBS Crossfire's VTX settings can push a band/channel/power to the FC when the radio connects. Turn these off, or set them to the planned values, on every pilot's radio.</div>
+
+<!-- -------------------------------- -->
+<h3 id="betaflight">11.1 Betaflight</h3>
+<p>Betaflight (4.1 and later) needs a <b>VTX table</b> loaded before it can control a SmartAudio, Tramp or HDZero VTX. The band, channel and power numbers in Betaflight are positions in that table, which is why the planner wants each quad's table.</p>
+
+<h4>One-time setup</h4>
+<ol class="steps">
+  <li><b>Ports tab:</b> on the UART wired to the VTX control wire, set <i>Peripherals</i> to <i>VTX (TBS SmartAudio)</i> or <i>VTX (IRC Tramp)</i>. Save and reboot. (For HDZero, configure the UART for MSP DisplayPort per HDZero's Betaflight guide.)</li>
+  <li><b>Video Transmitter tab:</b> load the VTX table from your VTX manufacturer (<i>Load from file</i> or <i>Load from clipboard</i>), then <i>Save</i>. Many VTX makers publish Betaflight table files; Betaflight's wiki keeps a list.</li>
+  <li>Confirm the tab shows the VTX as detected (device type and current frequency appear).</li>
+</ol>
+
+<h4 id="bf-table">Getting the table into the planner</h4>
+<p>See <a href="#pull-table">Uploading VTX tables</a>. In short:</p>
+<ol class="steps">
+  <li>Betaflight Configurator → <b>CLI</b> tab → type <code>vtxtable</code> → Enter.</li>
+  <li>Copy all the output lines (they start with <code>vtxtable</code>).</li>
+  <li>Planner → that aircraft → <b>Paste table</b> (or <b>⬆ Upload VTX table file</b>).</li>
+</ol>
+<p>Example output:</p>
+<pre><code>vtxtable bands 5
+vtxtable channels 8
+vtxtable band 1 BOSCAM_A A FACTORY 5865 5845 5825 5805 5785 5765 5745 5725
+vtxtable band 2 BOSCAM_B B FACTORY 5733 5752 5771 5790 5809 5828 5847 5866
+vtxtable band 3 BOSCAM_E E FACTORY 5705 5685 5665    0 5885 5905    0    0
+vtxtable band 4 FATSHARK F FACTORY 5740 5760 5780 5800 5820 5840 5860 5880
+vtxtable band 5 RACEBAND R FACTORY 5658 5695 5732 5769 5806 5843 5880 5917
+vtxtable powerlevels 4
+vtxtable powervalues 14 23 27 30
+vtxtable powerlabels 25 200 500 1W</code></pre>
+
+<h4>Applying the plan</h4>
+<ol class="steps">
+  <li>Planner → ☰ → <b>Flight controller commands</b> → pick the drone → <i>Copy</i>.</li>
+  <li>Configurator → <b>CLI</b> → paste → Enter. The <code>save</code> line stores it and reboots the FC.</li>
+</ol>
+<pre><code># A1 (Team A) — pilot Alvarez — TBS Unify Pro32 HV — Betaflight
+#   E2 5685 MHz · takeoff 25 mW → flight 500 mW
+set vtx_band = 3
+set vtx_channel = 2
+set vtx_power = 1
+# power switch on RC channel 6 (AUX2): low = takeoff, high = flight
+vtx 0 1 0 0 1 900 1500
+vtx 1 1 0 0 3 1525 2100
+save</code></pre>
+<p><b>Power switch lines</b> (only when a power switch RC channel is set). They use Betaflight's <code>vtx</code> command, which has the fields:</p>
+<pre><code>vtx &lt;slot&gt; &lt;aux&gt; &lt;band&gt; &lt;channel&gt; &lt;power&gt; &lt;low µs&gt; &lt;high µs&gt;</code></pre>
+<ul>
+  <li><b>aux:</b> 0 = AUX1 (RC channel 5).</li>
+  <li><b>band / channel:</b> <code>0</code> = "don't change", so the switch only changes power.</li>
+  <li><b>power:</b> a level number from the VTX table.</li>
+</ul>
+<p>After pasting, type <code>vtx</code> on its own to list the active switch ranges and check them. Without a switch, the export adds a comment with the flight power level to select from the OSD or radio VTX menu.</p>
+<table>
+  <tr><th>Setting</th><th>Meaning</th></tr>
+  <tr><td><code>vtx_band</code></td><td>Band number in the quad's VTX table, starting at 1. (0 = use <code>vtx_freq</code> directly.)</td></tr>
+  <tr><td><code>vtx_channel</code></td><td>Channel 1–8 within that band.</td></tr>
+  <tr><td><code>vtx_power</code></td><td>Power level number in the table, starting at 1 (not mW).</td></tr>
+  <tr><td><code>vtx_low_power_disarm</code></td><td><code>OFF</code>, <code>ON</code> (minimum power while disarmed) or <code>UNTIL_FIRST_ARM</code>. Useful extra protection: grounded quads can't blast nearby goggles even if the switch is left high.</td></tr>
+</table>
+<h4>Verify</h4>
+<p>Reconnect and check the Video Transmitter tab (or type <code>get vtx</code> in the CLI). It should show the planned frequency. Then confirm in the goggles.</p>
+<div class="tip">If the quad's table differs from the one in the planner (different band order, missing channels, different power list), the numbers will point at the wrong channel. The comment line above each block gives the intended MHz and power — check it against the Video Transmitter tab.</div>
+
+<!-- -------------------------------- -->
+<h3 id="inav">11.2 INAV</h3>
+<p>INAV does <b>not</b> use Betaflight VTX tables. It has a built-in table with five 5.8 GHz bands. The planner knows this: for drones set to INAV it only uses these channels (so <b>no L band</b>), and it works out the power level number from the VTX's protocol.</p>
+<table>
+  <tr><th>vtx_band</th><th>Band</th><th>Channels 1–8 (MHz)</th></tr>
+  <tr><td>1</td><td>A</td><td>5865 5845 5825 5805 5785 5765 5745 5725</td></tr>
+  <tr><td>2</td><td>B</td><td>5733 5752 5771 5790 5809 5828 5847 5866</td></tr>
+  <tr><td>3</td><td>E</td><td>5705 5685 5665 5645 5885 5905 5925 5945</td></tr>
+  <tr><td>4</td><td>F</td><td>5740 5760 5780 5800 5820 5840 5860 5880</td></tr>
+  <tr><td>5</td><td>R (Race)</td><td>5658 5695 5732 5769 5806 5843 5880 5917</td></tr>
+</table>
+<p>1.3 GHz IRC Tramp VTXs use <code>vtx_frequency_group = FREQUENCYGROUP_1G3</code> with band 1 (1080–1360 in 40 MHz steps) or band 2 (same, but channel 5 = 1258 MHz).</p>
+
+<h4>One-time setup</h4>
+<ol class="steps">
+  <li><b>Ports tab:</b> on the UART wired to the VTX control wire, choose the SmartAudio or IRC Tramp VTX option in the peripherals column. Save and reboot. (HDZero: VTX control runs over the MSP DisplayPort/OSD port — follow HDZero's INAV guide.)</li>
+  <li>Optional CLI settings, only if the VTX doesn't respond:</li>
+</ol>
+<table>
+  <tr><th>Setting</th><th>Default</th><th>When to change</th></tr>
+  <tr><td><code>vtx_halfduplex</code></td><td>ON</td><td>Leave ON for the normal single-wire connection.</td></tr>
+  <tr><td><code>vtx_smartaudio_stopbits</code></td><td>2</td><td>Set to <code>1</code> for TBS Sixty9 (SmartAudio 2.1).</td></tr>
+  <tr><td><code>vtx_smartaudio_early_akk_workaround</code></td><td>ON</td><td>Workaround for early AKK SmartAudio VTXs.</td></tr>
+  <tr><td><code>vtx_softserial_shortstop</code></td><td>OFF</td><td>Some IRC Tramp VTXs on a soft-serial port need ON.</td></tr>
+  <tr><td><code>vtx_max_power_override</code></td><td>0</td><td>Tramp only: if the VTX reports the wrong maximum (e.g. says 200 mW but is 600 mW), enter the real max in mW.</td></tr>
+  <tr><td><code>vtx_low_power_disarm</code></td><td>OFF</td><td><code>ON</code> or <code>UNTIL_FIRST_ARM</code> recommended (minimum power while on the ground).</td></tr>
+  <tr><td><code>vtx_pit_mode_chan</code></td><td>1</td><td>Channel used in pit mode.</td></tr>
+</table>
+
+<h4>Power levels</h4>
+<p><code>vtx_power</code> is a level number, and what it means depends on the protocol:</p>
+<table>
+  <tr><th>Protocol</th><th>Levels (vtx_power = 1, 2, 3…)</th></tr>
+  <tr><td>SmartAudio 2.1</td><td>The VTX reports its own list (normally the same order as its Betaflight table). Check the mW on the OSD/Configurator after setting.</td></tr>
+  <tr><td>SmartAudio 1.0/2.0 (default list)</td><td>25, 200, 500, 800 mW</td></tr>
+  <tr><td>IRC Tramp, 5.8 GHz</td><td>Depends on the VTX's max: ≥800 mW → 25/100/200/500/800; ≥600 → 25/100/200/400/600; ≥400 → 25/100/200/400; ≥200 → 25/100/200</td></tr>
+  <tr><td>IRC Tramp, 1.3 GHz</td><td>25 / 200 / 800 mW (25 / 200 / 2000 for 2 W units)</td></tr>
+  <tr><td>MSP (HDZero)</td><td>1 = 25, 2 = 200, 3 = 500, 4 = 1000 mW ("MAX")</td></tr>
+</table>
+<p>Set the VTX's <b>Control protocol</b> (aircraft → Advanced) so the planner picks the right level. If the planned mW isn't in INAV's list, the planner rounds down and marks the power with <b>*</b>.</p>
+
+<h4>Applying the plan</h4>
+<ol class="steps">
+  <li>Planner → ☰ → <b>Flight controller commands</b> → pick the drone → <i>Copy</i>.</li>
+  <li>INAV Configurator → <b>CLI</b> → paste → Enter (<code>save</code> reboots the FC).</li>
+  <li>Check the result in the goggles and OSD.</li>
+</ol>
+<pre><code># C3 (Team C) — pilot Kim — TBS Unify Pro32 Nano — INAV
+#   E4 5645 MHz · takeoff 25 mW → flight 400 mW
+#   takeoff power: power level 1 as reported by the VTX — confirm it is 25 mW in the OSD/Configurator
+#   after takeoff raise to power level 4 (400 mW) via OSD menu or an adjustment switch
+set vtx_band = 3
+set vtx_channel = 4
+set vtx_power = 1
+save</code></pre>
+<p><b>Switching to flight power in INAV:</b> INAV has no Betaflight-style <code>vtx</code> switch command, so the export doesn't generate one. Do one of these instead:</p>
+<ul>
+  <li>Configurator → <b>Adjustments</b> tab: assign the "VTX power level" adjustment to a switch.</li>
+  <li>Or raise the power from the OSD menu after takeoff.</li>
+</ul>
+<p>Check the adjustment name in your Configurator version. If you use <code>vtx_low_power_disarm</code>, the VTX stays at minimum power until armed.</p>
+<div class="tip">You can also check or change these on the INAV Configurator's Configuration tab (VTX section) or from the OSD menu.</div>
+
+<!-- -------------------------------- -->
+<h3 id="ardupilot">11.3 ArduPilot</h3>
+<p>ArduPilot also has a built-in table. It includes the 5.8 GHz bands, <b>Low RaceBand</b> (same frequencies as Betaflight's L band), and 1.3 GHz, 3.3 GHz and "Band X" (4990–5200 MHz) bands. Unlike Betaflight and INAV, <b>band and channel numbers start at 0</b>, and <b>power is set in mW</b>.</p>
+<table>
+  <tr><th>VTX_BAND</th><th>Band</th><th>Channels (VTX_CHANNEL 0 → 7), MHz</th></tr>
+  <tr><td>0</td><td>Band A</td><td>5865 5845 5825 5805 5785 5765 5745 5725</td></tr>
+  <tr><td>1</td><td>Band B</td><td>5733 5752 5771 5790 5809 5828 5847 5866</td></tr>
+  <tr><td>2</td><td>Band E</td><td>5705 5685 5665 5645 5885 5905 5925 5945</td></tr>
+  <tr><td>3</td><td>Airwave (F)</td><td>5740 5760 5780 5800 5820 5840 5860 5880</td></tr>
+  <tr><td>4</td><td>RaceBand</td><td>5658 5695 5732 5769 5806 5843 5880 5917</td></tr>
+  <tr><td>5</td><td>Low RaceBand</td><td>5362 5399 5436 5473 5510 5547 5584 5621</td></tr>
+  <tr><td>6</td><td>1G3 Band A</td><td>1080 1120 1160 1200 1240 1280 1320 1360</td></tr>
+  <tr><td>7</td><td>1G3 Band B</td><td>1080 1120 1160 1200 1258 1280 1320 1360</td></tr>
+  <tr><td>8</td><td>Band X</td><td>4990 5020 5050 5080 5110 5140 5170 5200</td></tr>
+  <tr><td>9</td><td>3G3 Band A</td><td>3330 3350 3370 3390 3410 3430 3450 3470</td></tr>
+  <tr><td>10</td><td>3G3 Band B</td><td>3170 3190 3210 3230 3250 3270 3290 3310</td></tr>
+</table>
+
+<h4>One-time setup</h4>
+<ol class="steps">
+  <li>Set <code>VTX_ENABLE = 1</code> and reboot.</li>
+  <li>On the serial port wired to the VTX control wire (example uses SERIAL5 — use your port number):</li>
+</ol>
+<table>
+  <tr><th>VTX type</th><th>Parameters</th></tr>
+  <tr><td>SmartAudio</td><td><code>SERIAL5_PROTOCOL = 37</code>, <code>SERIAL5_BAUD</code> = 4800 baud, <code>SERIAL5_OPTIONS = 4</code> (half-duplex). If the VTX doesn't respond, try <code>SERIAL5_OPTIONS = 68</code> (half-duplex + pull-down).</td></tr>
+  <tr><td>IRC Tramp</td><td><code>SERIAL5_PROTOCOL = 44</code>; connect the VTX telemetry/control pin to the UART TX pin.</td></tr>
+  <tr><td>CRSF-controlled VTX</td><td><code>SERIAL5_PROTOCOL = 29</code> (not 23).</td></tr>
+  <tr><td>HDZero / MSP DisplayPort</td><td>The DisplayPort OSD uses <code>SERIALx_PROTOCOL = 42</code> (see ArduPilot's DisplayPort docs). ArduPilot's VTX code includes MSP as a control transport (<code>VTX_TYPES</code> bit 3), but the VTX docs page doesn't document HDZero control. Confirm on your firmware version that channel changes reach the VTX.</td></tr>
+</table>
+<p>Reboot after changing serial parameters.</p>
+
+<h4>VTX parameters</h4>
+<table>
+  <tr><th>Parameter</th><th>Meaning</th></tr>
+  <tr><td><code>VTX_BAND</code></td><td>0–10, table above.</td></tr>
+  <tr><td><code>VTX_CHANNEL</code></td><td>0–7 (shown as channel 1–8 on screen).</td></tr>
+  <tr><td><code>VTX_POWER</code></td><td>mW (1–1000). Rounds <i>down</i> to a level the VTX supports: 25, 100, 200, 400, 500, 600, 800, 1000 (100/400/1000 only on SmartAudio 2.1).</td></tr>
+  <tr><td><code>VTX_FREQ</code></td><td>Derived from band + channel. The planner sets band/channel only; don't put a different VTX_FREQ in the same file.</td></tr>
+  <tr><td><code>VTX_MAX_POWER</code></td><td>Top of the range for an RC power switch (<code>RCx_OPTION = 94</code>).</td></tr>
+  <tr><td><code>VTX_OPTIONS</code></td><td>Bitmask: 1 = pit mode, 2 = pit mode until armed, 4 = pit mode when disarmed, 8 = unlocked, 16 = add leading zero byte, 32 = SmartAudio 1 stop-bit, 64 = ignore SmartAudio CRC, 128 = ignore CRSF status updates. <b>Recommended: 4</b> (low power on the ground). Only use "unlocked" if you are authorized for the resulting frequencies/powers.</td></tr>
+</table>
+<p>For drones set to ArduPilot, the planner models the power ArduPilot will really use (rounded down; VTXs above 1 W are capped at 1000 mW) and marks changed values with <b>*</b>.</p>
+
+<h4>Applying the plan</h4>
+<ol class="steps">
+  <li>Planner → ☰ → <b>Flight controller commands</b> → pick the ArduPilot drone → <i>Download</i> (saves <code>CALLSIGN-vtx.param</code>).</li>
+  <li><b>Mission Planner:</b> CONFIG → Full Parameter List → <i>Load from file</i> → choose the file → <i>Write Params</i>. Reboot.</li>
+  <li><b>QGroundControl</b> uses a different file format. Set the four <code>VTX_</code> values by hand under Vehicle Setup → Parameters (search "VTX").</li>
+  <li><b>MAVProxy:</b> <code>param load CALLSIGN-vtx.param</code>.</li>
+  <li>Check the frequency in the goggles. ArduPilot announces the VTX band/channel at boot in the ground station messages.</li>
+</ol>
+<pre><code># B2 (Team B) — pilot Foster — GEPRC 5.8G 800mW (template) — ArduPilot
+#   B1 5733 MHz · takeoff 25 mW → flight 800 mW
+#   Band B ch1
+VTX_ENABLE,1
+VTX_BAND,1
+VTX_CHANNEL,0
+VTX_POWER,25
+# RC7 = VTX power switch (6 positions over 1200-1800 us). Top = VTX_MAX_POWER (flight power).
+# BOTTOM = pit mode (0 mW, no usable video). ...
+RC7_OPTION,94
+VTX_MAX_POWER,800</code></pre>
+<p><b>Switching to flight power in ArduPilot:</b> <code>VTX_POWER</code> is the power at boot, i.e. takeoff power. With a power switch RC channel set, the export also adds:</p>
+<ul>
+  <li><code>RCx_OPTION = 94</code> (VTX power switch).</li>
+  <li><code>VTX_MAX_POWER</code> = the planned flight power.</li>
+</ul>
+<p>ArduPilot spreads 6 power positions across the switch. The <b>top</b> position gives <code>VTX_MAX_POWER</code>.</p>
+<div class="warn">The <b>bottom</b> position is pit mode (0 mW, no usable video). Use a 3-position switch: middle for takeoff, top for flight. The middle position's exact mW comes from <code>VTX_MAX_POWER</code>, so confirm it on the OSD before the mission.</div>
+<p>Without a switch, change <code>VTX_POWER</code> to the flight value from the GCS or the OSD parameter menu after takeoff.</p>
+
+<!-- -------------------------------- -->
+<h3 id="fw-compare">11.4 Side-by-side</h3>
+<table>
+  <tr><th></th><th>Betaflight</th><th>INAV</th><th>ArduPilot</th></tr>
+  <tr><td>Channel table</td><td>Per-quad <code>vtxtable</code> (import it)</td><td>Built in: A B E F R (+1.3 GHz)</td><td>Built in: A B E F R L, 1.3 / 3.3 GHz, X</td></tr>
+  <tr><td>Band numbering</td><td>1-based, table order</td><td>1-based (1=A … 5=R)</td><td><b>0-based</b> (0=A … 4=R, 5=L)</td></tr>
+  <tr><td>Channel numbering</td><td>1–8</td><td>1–8</td><td><b>0–7</b></td></tr>
+  <tr><td>Power setting</td><td>Level number in table</td><td>Level number (protocol-dependent)</td><td><b>mW</b>, rounded down</td></tr>
+  <tr><td>Where to apply</td><td>CLI paste + <code>save</code></td><td>CLI paste + <code>save</code></td><td>Parameter file / parameter list, reboot</td></tr>
+  <tr><td>Takeoff → flight power switch</td><td><code>vtx</code> command (exported)</td><td>Adjustments tab "VTX power level" (manual)</td><td><code>RCx_OPTION = 94</code> + <code>VTX_MAX_POWER</code> (exported)</td></tr>
+  <tr><td>Low power on ground</td><td><code>vtx_low_power_disarm</code></td><td><code>vtx_low_power_disarm</code></td><td><code>VTX_OPTIONS = 4</code></td></tr>
+  <tr><td>Upload table in planner?</td><td><b>Yes</b>, needed for correct indices</td><td>Check power levels (<a href="#pull-table">how</a>)</td><td>Check power levels</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="field">12. Field procedure</h2>
+<ol class="steps">
+  <li><b>Before departure:</b> solve, print channel cards, save the mission file, download offline maps for the area. Apply and verify settings on every aircraft at the bench.</li>
+  <li><b>On arrival:</b> before anyone powers a VTX, scan the band with goggles or a spectrum analyzer. Add anything you find to Environment → External emitters and re-solve if needed.</li>
+  <li><b>Power-up discipline:</b> only power a quad once its pilot has confirmed the channel on the card. Take off at <b>takeoff power</b>, and switch to <b>flight power</b> only once clear of the launch point. Do the reverse before landing.</li>
+  <li><b>Confirm each link:</b> each pilot checks they see <i>their own</i> drone (wave a hand in front of the camera) and ticks the ✓ column on the card.</li>
+  <li><b>Changes in the field:</b> if a VTX fails or a team relocates, update the planner, re-solve with the unaffected drones <i>locked</i>, and hand out the changes.</li>
+</ol>
+
+<!-- ============================================================ -->
+<h2 id="trouble">13. Troubleshooting</h2>
+<table>
+  <tr><th>Symptom</th><th>Likely cause / fix</th></tr>
+  <tr><td>Commands accepted but VTX doesn't change</td><td>Control wire not on a TX pin or wrong UART; peripheral/protocol not set; Betaflight has no VTX table loaded. INAV: try <code>vtx_smartaudio_stopbits = 1</code> (TBS Sixty9) or the AKK workaround. ArduPilot: <code>SERIALx_OPTIONS</code> 4 → 68; check <code>VTX_ENABLE = 1</code> and reboot.</td></tr>
+  <tr><td>Wrong channel after paste (Betaflight)</td><td>The table in the planner isn't this quad's. Upload the quad's own <code>vtxtable</code> on its aircraft card and re-solve.</td></tr>
+  <tr><td>Power doesn't change with the switch</td><td>Betaflight: type <code>vtx</code> to check the ranges and confirm the switch channel moves past 1525 µs in the Receiver tab. ArduPilot: check <code>RCx_OPTION = 94</code> is on the right channel. <code>vtx_low_power_disarm</code> holds minimum power while disarmed.</td></tr>
+  <tr><td>Channel changes back after the radio connects</td><td>Radio-side VTX control (ELRS VTX Administrator / Crossfire VTX settings). Disable it or match it to the plan.</td></tr>
+  <tr><td>Power stuck at minimum</td><td>Disarmed with low-power-disarm or pit mode active (normal). Otherwise the VTX may be region-locked — follow the manufacturer's unlock procedure, and only if authorized.</td></tr>
+  <tr><td>"No channel that the VTX, receiver and firmware all support"</td><td>E.g. an INAV drone whose table only has L band, or goggles that can't tune the VTX's range. Check the aircraft's firmware, goggles and uploaded table.</td></tr>
+  <tr><td>Planner says OK but there's interference on site</td><td>Unlisted emitter (scan and add it), a VTX off-frequency (enter <i>Measured freq. offset</i>), a teammate launching closer than planned, or reflections in urban areas. Raise <i>Required SIR</i> for that receiver.</td></tr>
+  <tr><td>Planner says conflict but it flies fine</td><td>The model is conservative (worst-case positions, bare-earth terrain, 6 dB fade margin). Calibrate the receiver figures or fade margin from experience.</td></tr>
+  <tr><td>Launch point lands in the wrong place</td><td>Lat/long typed in the wrong order (use N/S/E/W letters to be explicit), a missing minus sign on west longitudes, or the wrong MGRS grid zone (e.g. 11S vs 18S). Check the green conversion line under the field before pressing Enter.</td></tr>
+  <tr><td>Map is blank offline</td><td>That area or zoom level wasn't downloaded. Use ☰ → Download map + terrain while online.</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="model">14. How the model works</h2>
+<ul>
+  <li><b>Own link:</b> your drone at the edge of the team circle, line-of-sight, minus the fade margin.</li>
+  <li><b>Interference:</b> every other drone airborne at the same time, at flight power, at its worst-case position (19 sample points across its team circle). For teammates the planner checks two cases and uses whichever is worse: a teammate's drone in flight at the <i>in-flight spacing</i> (flight power), and a teammate taking off or landing at the <i>takeoff spacing</i> (takeoff power).</li>
+  <li><b>Path loss:</b> free-space loss plus diffraction over terrain (Deygout knife-edge method, ~30 m elevation data, 4/3-earth curvature). Terrain comes from AWS Terrain Tiles, which use USGS 3DEP in the US.</li>
+  <li><b>Receiver:</b> off-channel rejection vs frequency offset (after subtracting VTX tolerance and allowing for wider digital signals), plus third-order intermodulation from every pair of strong signals, plus external emitters and noise.</li>
+  <li><b>Margin:</b> combines the noise margin (SNR − required) and interference margin (SIR − required).</li>
+  <li><b>Solver:</b> simulated annealing over every channel each drone's VTX table, receiver and firmware allow. It maximizes the worst pilot's margin, then the overall margin, with optional power raising and lowering.</li>
+</ul>
+<p><b>Not modelled:</b> trees and buildings (except the optional extra loss), reflections and multipath, antenna radiation patterns (full gain is assumed toward every interferer), and 5th-order intermodulation. Receiver figures are generic estimates.</p>
+
+<!-- ============================================================ -->
+<h2 id="glossary">15. Glossary</h2>
+<table>
+  <tr><td><b>AGL</b></td><td>Above ground level.</td></tr>
+  <tr><td><b>C/I, SIR</b></td><td>Carrier-to-interference: wanted signal vs unwanted signal, in dB.</td></tr>
+  <tr><td><b>dBm</b></td><td>Power relative to 1 mW. 25 mW ≈ 14 dBm, 200 mW ≈ 23, 1 W = 30.</td></tr>
+  <tr><td><b>EIRP</b></td><td>Transmit power plus antenna gain.</td></tr>
+  <tr><td><b>IIP3</b></td><td>How well a receiver resists intermodulation. Higher is better.</td></tr>
+  <tr><td><b>IMD</b></td><td>Intermodulation distortion — ghost signals created by mixing two strong signals.</td></tr>
+  <tr><td><b>LOS</b></td><td>Line of sight.</td></tr>
+  <tr><td><b>MSP</b></td><td>MultiWii Serial Protocol; used by HDZero for OSD and VTX control.</td></tr>
+  <tr><td><b>Pit mode</b></td><td>VTX transmits at minimal power (for bench and ground use).</td></tr>
+  <tr><td><b>SmartAudio / Tramp</b></td><td>Single-wire protocols for FC control of VTXs (TBS / ImmersionRC).</td></tr>
+  <tr><td><b>SNR</b></td><td>Signal-to-noise ratio.</td></tr>
+  <tr><td><b>VTX table</b></td><td>Betaflight's list of a VTX's bands, frequencies and power levels.</td></tr>
+</table>
+<p class="muted">Firmware details checked against Betaflight behaviour, INAV source (<code>settings.yaml</code>, <code>vtx_string.c</code>, VTX drivers) and ArduPilot source (<code>AP_VideoTX</code>) and docs, November 2026. Configurator menu names can change between versions.</p>
+</main>
+</div>
+</body>
+</html>

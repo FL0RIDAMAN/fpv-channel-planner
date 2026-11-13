@@ -1,0 +1,11 @@
+# OS / editor
+.DS_Store
+Thumbs.db
+*.swp
+
+# Local tooling
+.claude/
+
+# Printed channel cards and exported mission data (may contain locations)
+*.pdf
+*.fpvplan.json
