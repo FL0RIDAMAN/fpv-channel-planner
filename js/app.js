@@ -358,7 +358,7 @@ function missionSection(d) {
         num('Loiter time (min)', g, 'loiterMin', { min: 0, title: 'Autonomous missions hold here this long (0 = fly through)' }),
         h('div', null, h('button', { class: 'small danger', onclick: () => { d.target = null; commit(); } }, '✕ Remove target'))))
       : h('button', { class: 'small', onclick: () => { d.target = { id: uid('g'), lat: null, lon: null, altM: team?.altM ?? 60, loiterM: 150, loiterMin: 0 }; ui.focusCoord = d.target.id; commit(); } }, '+ Add target'),
-    h('div', { class: 'muted small-text', style: 'margin-top:4px' }, path ? `Flies ${team.route.length ? `the ${team.name} route` : 'from the launch point'}${g?.lat != null ? ' then to its target' : ''}${team.rtl !== false ? ', then returns to launch' : ''} · ${fmtDist(path.length)}.` : 'No route or target yet — planned as flying anywhere within the team radius.'),
+    h('div', { class: 'muted small-text', style: 'margin-top:4px' }, path ? `Flies ${team.route.length ? `the ${team.name} route` : 'from the launch point'}${g?.lat != null ? ' then to its target' : ''}${team.rtl === true ? ', then returns to launch' : ' (one-way)'} · ${fmtDist(path.length)}.` : 'No route or target yet — planned as flying anywhere within the team radius.'),
     d.flightMode === 'auto' && canAuto ? h('div', { class: 'row', style: 'margin-top:6px' },
       !path ? h('span', { class: 'muted small-text' }, 'Add a team route or a target to export a mission.')
         : fw === 'ardupilot' ? [
@@ -519,7 +519,7 @@ function importKml(t) {
 
 function routeSection(t) {
   const path = flightPath(t, null);
-  const summary = t.route.length ? `${t.route.length} waypoint${t.route.length === 1 ? '' : 's'} · ${fmtDist(path?.length ?? 0)}${t.rtl !== false ? ' · returns to launch' : ''}` : 'none — aircraft fly anywhere in the radius';
+  const summary = t.route.length ? `${t.route.length} waypoint${t.route.length === 1 ? '' : 's'} · ${fmtDist(path?.length ?? 0)}${t.rtl === true ? ' · returns to launch' : ' · one-way'}` : 'none — aircraft fly anywhere in the radius';
   return h('div', null,
     h('div', { class: 'section-label' }, `Route (${summary})`),
     t.route.map((w, i) => pointRow(t, 'route', w, i)),
@@ -530,7 +530,7 @@ function routeSection(t) {
     kmlChooser(t),
     routeIssues(t).map(m => h('div', { class: 'warn-box' }, m)),
     t.route.length ? h('div', { class: 'row', style: 'margin-top:6px' },
-      chk('Return to launch at the end', t, 'rtl'),
+      chk('Return to launch at the end (default: one-way)', t, 'rtl'),
       h('label', { class: 'f', title: 'How far aircraft may stray either side of the route (used for interference)' }, 'Corridor ± m',
         h('input', { type: 'number', min: 0, value: t.corridorM ?? 150, style: 'width:80px', onchange: e => { t.corridorM = Number(e.target.value) || 0; commit(); } }))) : null,
     t.route.some(w => w.lat != null) ? h('div', { class: 'row', style: 'margin-top:6px' }, h('span', { class: 'muted small-text' }, 'Export route:'),

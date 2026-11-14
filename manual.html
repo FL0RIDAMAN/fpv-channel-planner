@@ -207,7 +207,7 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
     </ul>
     On the map: ▲ launch, ⟳ loiter (with its circle), ▼ land.</li>
   <li><b>Export route</b>: <i>Mission Planner</i> (<code>.waypoints</code>), <i>QGC</i> (<code>.plan</code>), <i>INAV</i> (<code>.mission</code>) or <i>ATAK</i> (<code>.kml</code>, just this team). These export the team route without any aircraft's target. Each aircraft's own mission, with its target, is in that aircraft's Mission section.</li>
-  <li><b>Return to launch</b>: ends the route back at the launch point.</li>
+  <li><b>Return to launch</b>: <b>off by default</b>. Routes are one-way, ending at the last point, unless you tick this to add a leg back to the launch point. For an autonomous one-way mission, end it with a <b>Land</b> point. Otherwise the aircraft does whatever its firmware is set to do when a mission ends, such as hold or RTL.</li>
   <li><b>Corridor ±</b>: how far aircraft may stray either side of the route. Used for interference.</li>
 </ul>
 

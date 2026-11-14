@@ -44,7 +44,7 @@ export function newTeam(state, at) {
     id: uid('t'), name: `Team ${String.fromCharCode(65 + (i % 26))}`, color: TEAM_COLORS[i % TEAM_COLORS.length],
     lat: at?.lat ?? null, lon: at?.lon ?? null, radiusM: 800, altM: 60, pilotHeightM: 1.5,
     launchSepM: 20, flightSepM: 100, start: '', end: '',
-    route: [], rtl: true, corridorM: 150, pilotTrack: [], switchM: 150,
+    route: [], rtl: false, corridorM: 150, pilotTrack: [], switchM: 150,
   };
 }
 
@@ -52,7 +52,7 @@ export function emptyMission(siteKey = 'mwtc') {
   const site = SITES[siteKey];
   return {
     version: VERSION,
-    mission: { name: 'New mission', site: siteKey, envNoiseDb: site.envNoiseDb, nlosExtraDb: site.nlosExtraDb, fadeMarginDb: 6, bandFilter: [], notes: '' },
+    mission: { name: 'New mission', oneWayDefault: true, site: siteKey, envNoiseDb: site.envNoiseDb, nlosExtraDb: site.nlosExtraDb, fadeMarginDb: 6, bandFilter: [], notes: '' },
     receivers: RECEIVER_PRESETS.map(r => ({ id: uid('rx'), ...clone(r) })),
     teams: [], drones: [], emitters: [],
   };
@@ -175,9 +175,10 @@ export function exampleMission(siteKey = 'mwtc') {
 // Upgrade a saved mission (v1 kept a shared VTX library and a single power).
 // Fill in fields added after a mission was saved (routes, pilot tracks, targets, new goggle presets).
 function normalize(s) {
+  if (!s.mission.oneWayDefault) { for (const t of s.teams) t.rtl = false; s.mission.oneWayDefault = true; }
   for (const r of RECEIVER_PRESETS) if (!s.receivers.some(x => x.name === r.name)) s.receivers.push({ id: uid('rx'), ...clone(r) });
   for (const t of s.teams) {
-    t.route ??= []; t.pilotTrack ??= []; t.rtl ??= true; t.corridorM ??= 150; t.switchM ??= 150;
+    t.route ??= []; t.pilotTrack ??= []; t.rtl ??= false; t.corridorM ??= 150; t.switchM ??= 150;
     for (const w of [...t.route, ...t.pilotTrack]) w.id ??= uid('w');
     for (const w of t.route) w.type ??= 'wp';
   }

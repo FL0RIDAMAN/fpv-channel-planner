@@ -15,7 +15,7 @@ export function routeIssues(team) {
     if (w.type === 'launch' && i > 0) out.push(`Point ${i + 1} is a launch point but isn't first — it's treated as a waypoint.`);
     if (w.type === 'land' && i < r.length - 1) out.push(`Point ${i + 1} is a land point — the ${r.length - 1 - i} point(s) after it are ignored.`);
   });
-  if (r.some(w => w.type === 'land') && team.rtl !== false) out.push('The route ends with a landing, so "Return to launch" is ignored.');
+  if (r.some(w => w.type === 'land') && team.rtl === true) out.push('The route ends with a landing, so "Return to launch" is ignored.');
   return out;
 }
 
@@ -50,7 +50,7 @@ export function flightPath(team, drone) {
     if ((tgt.loiterM ?? 0) > 0) loiters.push({ lat: tgt.lat, lon: tgt.lon, alt: tgt.altM ?? team.altM, radius: tgt.loiterM, idx: targetIdx });
   }
   if (land) pts.push({ ...pt(land, pts[pts.length - 1].alt), kind: 'land', ref: land });
-  else if (team.rtl !== false) pts.push({ ...pt(start, pts[pts.length - 1].alt), kind: 'rtl' });
+  else if (team.rtl === true) pts.push({ ...pt(start, pts[pts.length - 1].alt), kind: 'rtl' });
   const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + distM(pts[i - 1], pts[i]));
   return { pts, cum, length: cum[cum.length - 1], targetIdx, loiterM: tgt ? (tgt.loiterM ?? 0) : 0, target: tgt, loiters, start };
