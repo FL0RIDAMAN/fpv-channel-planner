@@ -32,7 +32,7 @@ The planner starts blank.
    - *+ Add team* with its **launch point**: type an MGRS grid or lat/long, or pick it on the map. Set the radius, height and time window.
    - *+ Add aircraft* for each quad. Enter the callsign, **pilot name**, flight controller, goggles and VTX model.
    - **Upload the `vtxtable` pulled from that quad.**
-   - Set **takeoff** and **in-flight** VTX power.
+   - Solve picks each aircraft's channel **and** its **takeoff/landing** and **in-flight** VTX power.
    - Each new aircraft copies the previous one's setup.
    - Optional: draw a **team route** (or import it from ATAK), add **pilot movement**, and give aircraft **targets**.
    - Set each aircraft to **hand-flown** or **autonomous** (INAV/ArduPilot mission downloads).

@@ -53,7 +53,6 @@
   <li><b>+ Add first team</b>. A new team card appears with the cursor in its <b>Launch point</b> field. Type an MGRS grid or lat/long and press <b>Enter</b>, or press <i>📍 Map</i> and tap the spot. Rename the team if you like, then set the flying radius, flying height, and (optionally) start and end times.</li>
   <li><b>+ Add aircraft</b> inside the team card. Enter the <b>callsign</b>, <b>pilot name</b>, flight controller and goggles.</li>
   <li>Pick the <b>VTX model</b>, then <b>⬆ Upload VTX table file</b> (or <i>Paste table</i>) with the table pulled from that quad (<a href="#pull-table">how</a>).</li>
-  <li>Set <b>Takeoff / landing</b> power and <b>In flight</b> power.</li>
   <li>Press <b>+ Add aircraft</b> again for the next one. It copies the previous aircraft's setup, so you usually only change the callsign, pilot and table.</li>
   <li>Repeat for each team. Add known Wi-Fi or other emitters on the <b>Environment</b> tab.</li>
   <li>Press <b>Solve channels</b> and review the <b>Plan</b> tab. Fix anything red (<a href="#reading">what to do</a>).</li>
@@ -103,6 +102,7 @@
   <tr><td>Launch point</td><td>Where the team's pilots stand and their aircraft take off. Enter it one of three ways (<a href="#coords">formats</a>): type an <b>MGRS grid</b>, type a <b>lat/long</b>, or press <b>📍 Map</b> and tap the map. It's shown as MGRS with lat/long underneath. You can also drag the team's marker on the map. A team with no launch point is left out of the plan.</td></tr>
   <tr><td>Flying radius</td><td>Furthest the drones go from the pilots. A bigger radius means a weaker own signal at the edge, and a bigger area that can interfere with other teams.</td></tr>
   <tr><td>Flying height AGL</td><td>Typical height above ground. Higher drones see over more terrain, which helps your own link but spreads interference further.</td></tr>
+  <tr><td>Switch to flight power at</td><td>How far from the launch point pilots stay at takeoff power before switching up to flight power (and where they switch back down on the way in to land). Default 150 m. It's printed on the channel card.</td></tr>
   <tr><td>Start / End time</td><td>When the team is airborne. Leave blank for "the whole mission". Teams whose windows don't overlap can share channels.</td></tr>
   <tr><td><i>Advanced:</i> Takeoff spacing</td><td>Closest a teammate takes off or lands (at <b>takeoff power</b>) to another pilot's goggles. Default 20 m.</td></tr>
   <tr><td><i>Advanced:</i> In-flight spacing</td><td>Closest a teammate's airborne drone (at <b>flight power</b>) gets to another pilot's goggles. Default 100 m.</td></tr>
@@ -138,8 +138,7 @@
   <tr><td>Goggles / receiver</td><td>What the pilot watches this aircraft on (edit the list on the <a href="#goggles">Goggles tab</a>).</td></tr>
   <tr><td>VTX model</td><td>Starting template for this quad's VTX: brand, type, control protocol and an approximate table. Choose "Other — Unlisted" if yours isn't there.</td></tr>
   <tr><td>⬆ Upload VTX table file / Paste table</td><td>Replaces the template with this quad's real table. See <a href="#pull-table">Uploading VTX tables</a>.</td></tr>
-  <tr><td><b>Takeoff / landing</b> power</td><td>VTX power while on the ground and near the launch point, usually the lowest level. The planner uses it for the teammate takeoff spacing case.</td></tr>
-  <tr><td><b>In flight</b> power</td><td>VTX power once airborne, usually much higher. The planner uses it for the pilot's own link and for interference to everyone else. With "Also adjust in-flight VTX power" on, the solver may raise or lower it. Tick <i>Lock flight power</i> to stop that.</td></tr>
+  <tr><td><b>VTX power (planned)</b></td><td><b>Set by Solve, not by you.</b> The planner gives every aircraft a <b>takeoff/landing</b> power and an <b>in-flight</b> power, chosen so that pilots flying at the same time don't step on each other, each at the lowest level that keeps everyone's picture clean (<a href="#solve">how</a>). The values show here, on the channel card and in the exported commands. Tick <i>Fix by hand</i> only for a quad whose power can't change; the planner then plans everyone else around it.</td></tr>
 </table>
 <p><b>Advanced</b> (inside each aircraft):</p>
 <table>
@@ -268,7 +267,12 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 <h2 id="solve">Solving</h2>
 <p>Press <b>Solve channels</b> (top bar or Plan tab). In a second or two the solver tries thousands of channel combinations from every VTX table and picks the one where the <b>worst</b> pilot has the most margin.</p>
 <ul>
-  <li><b>Also adjust in-flight VTX power</b>: raises the <i>in-flight</i> power on links that are too weak, and lowers it everywhere else, while keeping every link at least 3 dB above its threshold. Lower power reduces interference and detectability. Takeoff power is never changed; aircraft with <i>Lock flight power</i> are left alone.</li>
+  <li><b>Powers are planned too.</b> For every aircraft the solver picks two powers:
+    <ul>
+      <li><b>Takeoff/landing power:</b> checked against the pilot's own video out to the switch distance, and against teammates taking off nearby.</li>
+      <li><b>In-flight power:</b> checked against the pilot's own video at the furthest point of the route, and against every other aircraft flying at the same time.</li>
+    </ul>
+    It starts takeoff at the lowest level and raises any power only where a link is range-limited. It then steps every power down for as long as all pilots stay at least 3 dB clear, never putting takeoff above flight power. The result is the least power that keeps simultaneous flights apart, which also cuts detectability. Powers you've fixed by hand are left alone.</li>
   <li><b>Allowed bands</b> — untick bands you can't use (e.g. L band if your goggles can't tune it, or bands outside your frequency authorization).</li>
   <li>Locked drones keep their channel and/or power; the others are planned around them.</li>
 </ul>
@@ -316,7 +320,7 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
   <li>A VTX with no control wire must be set with its button (and its LED/OSD menu). Mark it <i>Lock channel</i> and <i>Lock power</i> in the planner, set to whatever the button gives you, or set it to the solved channel by hand.</li>
 </ul>
 <h3 id="power-switch">Takeoff power → flight power</h3>
-<p>The exported settings boot the VTX at its <b>takeoff power</b>. Getting to <b>flight power</b> once airborne is done one of three ways:</p>
+<p>Both powers come from the plan. The exported settings boot the VTX at its planned <b>takeoff power</b>. Each team's channel card tells pilots to switch to the planned <b>flight power</b> at the team's switch distance from the launch point, and back before landing. The switch itself is done one of three ways:</p>
 <ol class="steps">
   <li><b>Radio switch (recommended):</b> enter the switch's RC channel under the aircraft's <i>Advanced → Power switch RC channel</i>. The export then adds the switch setup for that firmware (details in each section below).</li>
   <li><b>OSD or radio menu:</b> the pilot raises the power from the goggles/OSD VTX menu or a radio Lua script after takeoff. The export lists the level to choose.</li>
@@ -542,7 +546,7 @@ VTX_MAX_POWER,800</code></pre>
 <ol class="steps">
   <li><b>Before departure:</b> solve, print channel cards, save the mission file, download offline maps for the area. Apply and verify settings on every aircraft at the bench.</li>
   <li><b>On arrival:</b> before anyone powers a VTX, scan the band with goggles or a spectrum analyzer. Add anything you find to Environment → External emitters and re-solve if needed.</li>
-  <li><b>Power-up discipline:</b> only power a quad once its pilot has confirmed the channel on the card. Take off at <b>takeoff power</b>, and switch to <b>flight power</b> only once clear of the launch point. Do the reverse before landing.</li>
+  <li><b>Power-up discipline:</b> only power a quad once its pilot has confirmed the channel on the card. Take off at the planned <b>takeoff power</b>, and switch to the planned <b>flight power</b> only once past the switch distance on the card. Do the reverse before landing. Don't change powers on your own: the plan depends on everyone flying at their planned levels.</li>
   <li><b>Confirm each link:</b> each pilot checks they see <i>their own</i> drone (wave a hand in front of the camera) and ticks the ✓ column on the card.</li>
   <li><b>Changes in the field:</b> if a VTX fails or a team relocates, update the planner, re-solve with the unaffected drones <i>locked</i>, and hand out the changes.</li>
 </ol>

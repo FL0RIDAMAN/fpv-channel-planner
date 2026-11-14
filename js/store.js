@@ -25,7 +25,7 @@ export function newDrone(state, teamId) {
   const callsign = `${prefix}${mates.length + 1}`;
   const prev = mates[mates.length - 1];
   if (prev) { // same team usually flies the same kit — copy it
-    return { ...clone(prev), id: uid('d'), callsign, pilot: '', assign: null, locked: false, active: true, target: null,
+    return { ...clone(prev), id: uid('d'), callsign, pilot: '', assign: null, locked: false, active: true, target: null, powerPlanned: false,
       vtx: { ...clone(prev.vtx), source: prev.vtx.source === 'uploaded' ? 'copied' : prev.vtx.source, copiedFrom: prev.callsign } };
   }
   const vtx = vtxFromTemplate(templateKey(TEMPLATES[0]));
@@ -44,7 +44,7 @@ export function newTeam(state, at) {
     id: uid('t'), name: `Team ${String.fromCharCode(65 + (i % 26))}`, color: TEAM_COLORS[i % TEAM_COLORS.length],
     lat: at?.lat ?? null, lon: at?.lon ?? null, radiusM: 800, altM: 60, pilotHeightM: 1.5,
     launchSepM: 20, flightSepM: 100, start: '', end: '',
-    route: [], rtl: true, corridorM: 150, pilotTrack: [],
+    route: [], rtl: true, corridorM: 150, pilotTrack: [], switchM: 150,
   };
 }
 
@@ -177,7 +177,7 @@ export function exampleMission(siteKey = 'mwtc') {
 function normalize(s) {
   for (const r of RECEIVER_PRESETS) if (!s.receivers.some(x => x.name === r.name)) s.receivers.push({ id: uid('rx'), ...clone(r) });
   for (const t of s.teams) {
-    t.route ??= []; t.pilotTrack ??= []; t.rtl ??= true; t.corridorM ??= 150;
+    t.route ??= []; t.pilotTrack ??= []; t.rtl ??= true; t.corridorM ??= 150; t.switchM ??= 150;
     for (const w of [...t.route, ...t.pilotTrack]) w.id ??= uid('w');
     for (const w of t.route) w.type ??= 'wp';
   }

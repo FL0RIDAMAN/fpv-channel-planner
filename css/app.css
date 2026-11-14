@@ -159,3 +159,8 @@ label.f input { width: 100%; }
 .wp-side { padding-top: 0; justify-content: flex-start; align-items: flex-end; }
 .wp-row.wp-launch, .wp-row.wp-land { border-left-color: var(--accent); }
 .wp-row.wp-loiter { border-left-color: var(--warn); }
+
+.power-box { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
+.power-line { display: flex; gap: 10px; align-items: center; padding: 4px 0; flex-wrap: wrap; }
+.power-line + .power-line { border-top: 1px solid var(--line); }
+.power-line b { font-size: 15px; }

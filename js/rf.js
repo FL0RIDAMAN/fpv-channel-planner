@@ -167,7 +167,11 @@ export function buildScenario(state) {
       for (const q of syncedPairs(n.team, n.path, 40)) r = Math.max(r, Math.hypot(distM(q.drone, q.pilot), q.drone.alt));
       if (n.drone.maxRangeM) r = Math.max(r, n.drone.maxRangeM);
     }
-    n.desiredGain = n.drone.txGainDbi + n.drone.rxGainDbi - fspl(r, REF_F) - polLoss(n.drone.txPol, n.drone.rxPol, true) - (state.mission.fadeMarginDb ?? 6);
+    const fixed = n.drone.txGainDbi + n.drone.rxGainDbi - polLoss(n.drone.txPol, n.drone.rxPol, true) - (state.mission.fadeMarginDb ?? 6);
+    n.desiredGain = fixed - fspl(r, REF_F);
+    // takeoff/landing phase: own aircraft out to the distance where the pilot switches to flight power
+    n.switchM = Math.max(20, n.team.switchM ?? 150);
+    n.desiredGainT = fixed - fspl(Math.hypot(n.switchM, n.team.altM ?? 60), REF_F);
     n.desiredRangeM = r;
   }
 
@@ -264,10 +268,11 @@ function pairPower(scn, i, j, pF, pT, fj) {
 const powersDbm = (nodes, idx) => nodes.map((n, i) => dbm(n.powersMw[idx[i]] ?? 25));
 
 // assign: Int array of candidate indices; pIdx: Int array of power indices
-export function evaluate(scn, assign, pIdx, detail = false) {
+// tIdx: takeoff/landing power indices (defaults to each node's current takeoff power).
+export function evaluate(scn, assign, pIdx, detail = false, tIdx = null) {
   const { nodes, ext } = scn, N = nodes.length;
   const freq = nodes.map((n, i) => n.cands[assign[i]].freq);
-  const pdbm = powersDbm(nodes, pIdx), ptdbm = powersDbm(nodes, nodes.map(n => n.tIdx));
+  const pdbm = powersDbm(nodes, pIdx), ptdbm = powersDbm(nodes, tIdx || nodes.map(n => n.tIdx));
   const res = new Array(N);
   let minMargin = Infinity, sumMargin = 0;
   for (let i = 0; i < N; i++) {
@@ -307,15 +312,17 @@ export function evaluate(scn, assign, pIdx, detail = false) {
       if (detail) contrib.push({ kind: 'external', name: e.name, I, df: Math.abs(fi - e.freq) });
     }
     const nLin = 10 ** (ni.noiseDbm / 10);
-    const sir = lin > 0 ? S - 10 * log10(lin) : 99;
-    const snr = S - ni.noiseDbm;
-    const sinr = S - 10 * log10(lin + nLin);
-    const mI = sir - ni.reqSir, mN = snr - ni.reqSnr;
     // soft-minimum of the interference and noise margins (both degrade the picture together)
-    const margin = -10 * log10(10 ** (-mI / 10) + 10 ** (-mN / 10));
+    const phase = Sx => {
+      const sir = lin > 0 ? Sx - 10 * log10(lin) : 99, snr = Sx - ni.noiseDbm;
+      const mI = sir - ni.reqSir, mN = snr - ni.reqSnr;
+      return { S: Sx, sir, snr, sinr: Sx - 10 * log10(lin + nLin), mI, mN, margin: -10 * log10(10 ** (-mI / 10) + 10 ** (-mN / 10)) };
+    };
+    const F = phase(S), T = phase(ptdbm[i] + ni.desiredGainT - fAdj(fi));
+    const margin = Math.min(F.margin, T.margin);
     minMargin = Math.min(minMargin, margin);
     sumMargin += Math.min(margin, 10);
-    res[i] = { S, sinr, sir, snr, margin, mI, mN, freq: fi };
+    res[i] = { ...F, margin, marginF: F.margin, marginT: T.margin, takeoff: T, limitedPhase: T.margin < F.margin ? 'takeoff' : 'flight', freq: fi };
     if (detail) { contrib.sort((x, y) => y.I - x.I); res[i].contrib = contrib; }
   }
   return { res, minMargin: N ? minMargin : 0, sumMargin, score: (N ? minMargin : 0) * 100 + sumMargin };

@@ -16,7 +16,7 @@ import { missionItems, toWaypointsFile, toQgcPlan, toInavMission, toKml, readKml
 let state = load() || emptyMission('mwtc');
 let plan = null;          // { scn, assign, pIdx, ev }
 let terrainMsg = '';
-const ui = { tab: 'teams', placing: null, selectedTeam: null, openDrone: null, optimizePower: true, solving: false };
+const ui = { tab: 'teams', placing: null, selectedTeam: null, openDrone: null, solving: false };
 
 const $ = s => document.querySelector(s);
 const site = () => SITES[state.mission.site] || SITES.custom;
@@ -101,11 +101,13 @@ async function runSolve() {
   await new Promise(r => setTimeout(r, 30));
   const scn = plan.scn;
   if (!scn.nodes.length) { ui.solving = false; render(); alert('Nothing to solve — add teams (placed on the map) and drones.'); return; }
-  const best = solve(scn, { optimizePower: ui.optimizePower, iterations: 4000, restarts: 6, seed: Date.now() });
+  const best = solve(scn, { iterations: 4000, restarts: 6, seed: Date.now() });
   scn.nodes.forEach((n, i) => {
     const c = n.cands[best.assign[i]];
     n.drone.assign = { bandIdx: c.bandIdx, chIdx: c.chIdx };
-    if (ui.optimizePower) n.drone.flightPowerIdx = best.pIdx[i];
+    n.drone.flightPowerIdx = best.pIdx[i];
+    n.drone.takeoffPowerIdx = best.tIdx[i];
+    n.drone.powerPlanned = true;
   });
   ui.solving = false;
   ui.tab = 'results';
@@ -268,6 +270,7 @@ function remapAfterTableChange(d, old) {
   };
   d.takeoffPowerIdx = near(old.takeoffMw ?? 25);
   d.flightPowerIdx = near(old.flightMw ?? 800);
+  d.powerPlanned = false;
   const c = old.freq ? channelsOf(d.vtx).find(x => x.freq === old.freq) : null;
   d.assign = c ? { bandIdx: c.bandIdx, chIdx: c.chIdx } : null;
   if (!c) d.locked = false;
@@ -364,6 +367,23 @@ function missionSection(d) {
           : h('button', { class: 'small primary', onclick: () => downloadMission(d, 'inav') }, '⬇ INAV Configurator (.mission)')) : null);
 }
 
+// Takeoff/landing and in-flight power are outputs of Solve; a pilot can still fix either by hand.
+function powerPlanBox(d, fw, powerOpts) {
+  const team = byId(state.teams, d.teamId), v = d.vtx;
+  const planned = d.powerPlanned;
+  const row = (label, key, lockKey, hint) => h('div', { class: 'power-line' },
+    h('div', null, h('div', { class: 'muted small-text' }, label), d[lockKey]
+      ? h('select', { onchange: e => { d[key] = Number(e.target.value); commit(); } }, powerOpts.map(([i, l]) => h('option', { value: i, selected: i === d[key] || null }, l)))
+      : h('b', { class: planned ? '' : 'muted' }, planned ? powerLabel(v, d[key], fw) : 'set by Solve')),
+    h('div', { class: 'muted small-text', style: 'flex:1' }, hint),
+    chk('Fix by hand', d, lockKey));
+  return h('div', { class: 'power-box' },
+    row('Takeoff / landing', 'takeoffPowerIdx', 'takeoffLocked', `Until ${team?.switchM ?? 150} m from launch, and again on the way in to land.`),
+    row('In flight', 'flightPowerIdx', 'powerLocked', 'Beyond that distance.'),
+    planned ? null : h('div', { class: 'muted small-text' }, 'Press Solve channels: the planner picks the lowest takeoff and flight power that keeps every pilot clear.'),
+    (v.powers[d.flightPowerIdx]?.mW ?? 0) < (v.powers[d.takeoffPowerIdx]?.mW ?? 0) && (d.takeoffLocked || d.powerLocked) ? h('div', { class: 'warn-box' }, 'Fixed flight power is lower than takeoff power — check these are the right way round.') : null);
+}
+
 function droneEditor(d, r) {
   const v = d.vtx, rx = byId(state.receivers, d.receiverId), fw = d.firmware || 'betaflight';
   const cands = channelsOf(v).filter(c => (!rx || rx.ranges.some(([lo, hi]) => c.freq >= lo && c.freq <= hi)) && fwSupports(fw, c.freq));
@@ -387,12 +407,8 @@ function droneEditor(d, r) {
       h('button', { class: 'primary small', onclick: () => uploadTableFile(d) }, '⬆ Upload VTX table file'),
       h('button', { class: 'small', onclick: () => pasteTableDialog(d) }, 'Paste table'),
       h('a', { class: 'small-text', href: 'manual.html#pull-table', target: '_blank' }, 'How do I pull it?')),
-    h('div', { class: 'section-label' }, 'VTX power'),
-    h('div', { class: 'grid' },
-      sel('Takeoff / landing', d, 'takeoffPowerIdx', powerOpts, { numeric: true, title: 'Power while on the ground and near the launch point' }),
-      sel('In flight', d, 'flightPowerIdx', powerOpts, { numeric: true, title: 'Power once airborne. The solver may change this unless locked.' })),
-    h('div', { class: 'row' }, chk('Lock flight power (solver won\'t change it)', d, 'powerLocked')),
-    (d.vtx.powers[d.flightPowerIdx]?.mW ?? 0) < (d.vtx.powers[d.takeoffPowerIdx]?.mW ?? 0) ? h('div', { class: 'warn-box' }, 'Flight power is lower than takeoff power — check these are the right way round.') : null,
+    h('div', { class: 'section-label' }, 'VTX power (planned)'),
+    powerPlanBox(d, fw, powerOpts),
     missionSection(d),
     h('details', null, h('summary', { class: 'muted small-text' }, 'Advanced: channel lock, power switch, antennas, VTX details'),
       h('div', { class: 'grid', style: 'margin-top:6px' },
@@ -433,7 +449,7 @@ function droneRow(d) {
       h('span', { class: 'callsign' }, d.callsign || '—'),
       h('span', { class: 'pilot' }, d.pilot || h('i', { class: 'muted' }, 'no pilot')),
       h('span', { class: 'chan' }, f ? `${chanName(v, d.assign.bandIdx, d.assign.chIdx)} ${f}` : h('span', { class: 'muted' }, '—')),
-      h('span', { class: 'pw', title: 'takeoff → flight' }, `${powerLabel(v, d.takeoffPowerIdx, fw)} → ${powerLabel(v, d.flightPowerIdx, fw)}`),
+      h('span', { class: 'pw', title: 'Planned VTX power: takeoff/landing → in flight' }, d.powerPlanned || (d.takeoffLocked && d.powerLocked) ? `${powerLabel(v, d.takeoffPowerIdx, fw)} → ${powerLabel(v, d.flightPowerIdx, fw)}` : 'power: Solve'),
       badge,
       r && d.assign ? h('span', { class: `st ${status(r.margin)}` }, `${r.margin.toFixed(1)} dB`) : null,
       h('span', { class: 'chev' }, open ? '▾' : '▸')),
@@ -549,6 +565,7 @@ function teamCard(t) {
     h('div', { class: 'grid' },
       num(t.route?.length ? 'Flying radius (m, unused with a route)' : 'Flying radius (m)', t, 'radiusM', { min: 50, title: 'Furthest the drones go from the pilots when there is no route' }),
       num('Flying height AGL (m)', t, 'altM', { min: 1 }),
+      num('Switch to flight power at (m from launch)', t, 'switchM', { min: 20, title: 'Pilots fly at takeoff power until this far from the launch point, then switch to flight power (and back before landing). The planner checks the video at takeoff power out to here.' }),
       txt('Start time', t, 'start', { type: 'time' }),
       txt('End time', t, 'end', { type: 'time' })),
     h('details', null, h('summary', { class: 'muted small-text' }, 'Advanced: spacing and antenna height'),
@@ -697,8 +714,8 @@ function linkSection(scn) {
 function renderResultsTab() {
   const out = [h('h3', null, 'Channel plan')];
   out.push(h('div', { class: 'row' },
-    h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: ui.optimizePower, onchange: e => { ui.optimizePower = e.target.checked; } }), 'Also adjust in-flight VTX power'),
-    h('button', { class: 'primary', onclick: runSolve, disabled: ui.solving }, ui.solving ? 'Solving…' : 'Solve')));
+    h('button', { class: 'primary', onclick: runSolve, disabled: ui.solving }, ui.solving ? 'Solving…' : 'Solve'),
+    h('span', { class: 'muted small-text' }, 'Plans every aircraft\'s channel, takeoff/landing power and in-flight power.')));
   const letters = [...new Set(state.drones.flatMap(d => d.vtx.bands.map(b => b.letter)))];
   out.push(h('div', { class: 'row small-text', style: 'margin-top:6px' }, h('span', { class: 'muted' }, 'Allowed bands:'),
     letters.map(L => h('label', { class: 'chk' }, h('input', {
@@ -723,11 +740,13 @@ function renderResultsTab() {
     const r = ev.res[i], c = n.cands[plan.assign[i]];
     const top = r.contrib?.find(x => x.I > n.noiseDbm - 3);
     const range = `range/noise (${fmtDist(n.desiredRangeM)})`;
-    const why = r.mN < r.mI - 3 || !top ? range : contribText(top, scn.nodes, i) + (r.mN < 3 ? ' + range' : '');
+    const why = r.limitedPhase === 'takeoff' && r.marginT < 3
+      ? `own video at takeoff power (${fmtDist(n.switchM)})`
+      : r.mN < r.mI - 3 || !top ? range : contribText(top, scn.nodes, i) + (r.mN < 3 ? ' + range' : '');
     return h('tr', null,
       h('td', null, h('span', { class: 'swatch', style: `background:${n.team.color};margin-right:4px;vertical-align:-2px` }), n.drone.callsign, n.drone.pilot ? h('span', { class: 'muted' }, ` ${n.drone.pilot}`) : null),
       h('td', null, h('b', null, c.name), ` ${c.freq}`),
-      h('td', { title: 'takeoff → flight' }, `${powerLabel(n.vtx, n.tIdx, n.drone.firmware)} → ${powerLabel(n.vtx, plan.pIdx[i], n.drone.firmware)}`),
+      h('td', { title: 'Planned VTX power: takeoff/landing → in flight' }, `${powerLabel(n.vtx, n.tIdx, n.drone.firmware)} → ${powerLabel(n.vtx, plan.pIdx[i], n.drone.firmware)}`),
       h('td', { title: 'Desired signal at edge of area (incl. fade margin)' }, r.S.toFixed(0)),
       h('td', null, r.snr.toFixed(0)), h('td', null, r.sir > 90 ? '—' : r.sir.toFixed(0)),
       h('td', { class: `m-${status(r.margin)}` }, r.margin.toFixed(1)),
@@ -927,4 +946,14 @@ renderSiteOverlays(site());
 if (state.teams.some(t => t.lat != null)) fitTeams(state);
 render();
 recompute();
-if ('serviceWorker' in navigator && location.protocol !== 'file:') navigator.serviceWorker.register('sw.js').catch(() => {});
+if ('serviceWorker' in navigator && location.protocol !== 'file:') {
+  // When an update takes over, reload once so every file comes from the same version.
+  const hadController = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (!hadController || sessionStorage.getItem('fpv-sw-reloaded')) return;
+    sessionStorage.setItem('fpv-sw-reloaded', '1');
+    save(state);
+    location.reload();
+  });
+  navigator.serviceWorker.register('sw.js').catch(() => {});
+}

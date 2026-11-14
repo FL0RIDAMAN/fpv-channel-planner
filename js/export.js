@@ -22,24 +22,27 @@ function droneBlock(d, team) {
   const who = d.pilot ? ` — pilot ${d.pilot}` : '';
   const head = `${d.callsign} (${team?.name ?? '?'})${who} — ${v?.brand} ${v?.model} — ${FIRMWARES[fw].name}`;
   if (!v || !d.assign) return { fw, lines: [`# ${head}`, '#   NOT ASSIGNED — run Solve'] };
+
   const f = v.bands[d.assign.bandIdx]?.freqs[d.assign.chIdx];
   const ch = chanName(v, d.assign.bandIdx, d.assign.chIdx);
   const to = fwPowerSetting(fw, v, d.takeoffPowerIdx), fl = fwPowerSetting(fw, v, d.flightPowerIdx);
   const toL = powerLabel(v, d.takeoffPowerIdx, fw), flL = powerLabel(v, d.flightPowerIdx, fw);
   const sw = d.switchCh >= 5 && d.switchCh <= 16 ? d.switchCh : null;
-  const lines = [`# ${head}`, `#   ${ch} ${f} MHz · takeoff ${toL} → flight ${flL}`];
+  const sw0 = team?.switchM ?? 150;
+  const lines = [`# ${head}`, `#   ${ch} ${f} MHz · takeoff/landing ${toL} → in flight ${flL} (switch ${sw0} m from launch, back before landing)`];
+  if (!d.powerPlanned && !(d.takeoffLocked && d.powerLocked)) lines.push('#   WARNING: powers not planned yet — run Solve before using these');
   if (fw === 'betaflight') {
     lines.push(`set vtx_band = ${d.assign.bandIdx + 1}`, `set vtx_channel = ${d.assign.chIdx + 1}`, `set vtx_power = ${to.value}`);
     if (sw) {
       lines.push(`# power switch on RC channel ${sw} (AUX${sw - 4}): low = takeoff, high = flight`,
         `vtx 0 ${sw - 5} 0 0 ${to.value} 900 1500`, `vtx 1 ${sw - 5} 0 0 ${fl.value} 1525 2100`);
-    } else lines.push(`#   after takeoff raise to power level ${fl.value} (${flL}) — OSD menu, radio VTX menu, or set a power switch in the planner`);
+    } else lines.push(`#   ${sw0} m from launch raise to power level ${fl.value} (${flL}) — OSD menu, radio VTX menu, or set a power switch in the planner`);
     lines.push('save');
   } else if (fw === 'inav') {
     const n = fwLookup('inav', f);
     if (!n) return { fw, lines: [...lines, `#   ERROR: ${f} MHz is not in INAV's band table — re-solve`] };
     if (to.note) lines.push(`#   takeoff power: ${to.note}`);
-    lines.push(`#   after takeoff raise to power level ${fl.value} (${flL})${fl.note ? ` — ${fl.note}` : ''} via OSD menu or an adjustment switch`);
+    lines.push(`#   ${sw0} m from launch raise to power level ${fl.value} (${flL})${fl.note ? ` — ${fl.note}` : ''} via OSD menu or an adjustment switch`);
     if (n.group !== 'FREQUENCYGROUP_5G8') lines.push(`set vtx_frequency_group = ${n.group}`);
     lines.push(`set vtx_band = ${n.band}`, `set vtx_channel = ${n.channel}`, `set vtx_power = ${to.value}`, 'save');
   } else if (fw === 'ardupilot') {
@@ -52,7 +55,7 @@ function droneBlock(d, team) {
         '# BOTTOM = pit mode (0 mW, no usable video). Middle positions give intermediate levels derived from',
         '# VTX_MAX_POWER — use a 3-position switch, take off in the middle and confirm that level on the OSD.',
         `RC${sw}_OPTION,94`, `VTX_MAX_POWER,${fl.value}`);
-    } else lines.push(`#   after takeoff set VTX_POWER to ${fl.value} (OSD parameter menu / GCS), or set a power switch in the planner`);
+    } else lines.push(`#   ${sw0} m from launch set VTX_POWER to ${fl.value} (OSD parameter menu / GCS), or set a power switch in the planner`);
   }
   return { fw, lines };
 }
@@ -88,19 +91,19 @@ export function channelCardHtml(state, plan, siteName) {
   for (const t of state.teams) {
     const ds = state.drones.filter(d => d.teamId === t.id && d.active);
     if (!ds.length) continue;
-    html += `<div class="team-block"><h3>${esc(t.name)}</h3><div>Launch point <b>${t.lat != null ? (toMgrs(t.lat, t.lon) ?? '') : 'not set'}</b>${t.lat != null ? ` (${t.lat.toFixed(5)}, ${t.lon.toFixed(5)})` : ''} · radius ${t.radiusM} m · ${t.altM} m AGL${t.start ? ` · ${t.start}–${t.end}` : ''}</div>`;
+    html += `<div class="team-block"><h3>${esc(t.name)}</h3><div><b>VTX power:</b> takeoff/landing power until ${t.switchM ?? 150} m from launch, then in-flight power; back to takeoff power before landing.</div><div>Launch point <b>${t.lat != null ? (toMgrs(t.lat, t.lon) ?? '') : 'not set'}</b>${t.lat != null ? ` (${t.lat.toFixed(5)}, ${t.lon.toFixed(5)})` : ''} · radius ${t.radiusM} m · ${t.altM} m AGL${t.start ? ` · ${t.start}–${t.end}` : ''}</div>`;
     const rt = (t.route || []).filter(w => w.lat != null);
     if (rt.length) html += `<div>Route: ${rt.map((w, k) => `${w.type === 'launch' ? 'Launch' : w.type === 'land' ? 'Land' : w.type === 'loiter' ? `Loiter${w.loiterMin ? ` ${w.loiterMin} min` : ''}` : `WP${k + 1}`} ${toMgrs(w.lat, w.lon) ?? ''}${w.type === 'land' ? '' : ` @ ${w.altM ?? t.altM} m AGL`}`).join(' → ')}${t.rtl !== false && !rt.some(w => w.type === 'land') ? ' → RTL' : ''}</div>`;
     const pt = (t.pilotTrack || []).filter(w => w.lat != null);
     if (pt.length) html += `<div>Pilot movement: ${pt.map(w => toMgrs(w.lat, w.lon) ?? '').join(' → ')}</div>`;
     const tg = ds.filter(d => d.target?.lat != null);
     if (tg.length) html += `<div>Targets: ${tg.map(d => `${esc(d.callsign)} ${toMgrs(d.target.lat, d.target.lon) ?? ''}${d.flightMode === 'auto' ? ' (auto)' : ''}`).join(' · ')}</div>`;
-    html += '<table><tr><th>Callsign</th><th>Pilot</th><th>VTX</th><th>Channel</th><th>MHz</th><th>Takeoff → flight</th><th>FC</th><th>Receiver</th><th>Margin</th><th>✓</th></tr>';
+    html += '<table><tr><th>Callsign</th><th>Pilot</th><th>VTX</th><th>Channel</th><th>MHz</th><th>Takeoff / landing</th><th>In flight</th><th>FC</th><th>Receiver</th><th>Margin</th><th>✓</th></tr>';
     for (const d of ds) {
       const v = d.vtx, r = resBy.get(d.id);
       const ch = d.assign && v ? chanName(v, d.assign.bandIdx, d.assign.chIdx) : '—';
       const f = d.assign && v ? v.bands[d.assign.bandIdx]?.freqs[d.assign.chIdx] : '—';
-      html += `<tr><td><b>${esc(d.callsign)}</b></td><td>${esc(d.pilot)}</td><td>${esc(v ? `${v.brand} ${v.model}` : '?')}${v?.source === 'uploaded' ? '' : ' <i>(no table uploaded)</i>'}</td><td><b>${ch}</b></td><td>${f}</td><td>${esc(powerLabel(v, d.takeoffPowerIdx, d.firmware))} → ${esc(powerLabel(v, d.flightPowerIdx, d.firmware))}</td><td>${FIRMWARES[d.firmware || 'betaflight'].name}</td><td>${esc(rxs.get(d.receiverId)?.name ?? '?')}</td><td>${r ? r.margin.toFixed(1) + ' dB' : ''}</td><td></td></tr>`;
+      html += `<tr><td><b>${esc(d.callsign)}</b></td><td>${esc(d.pilot)}</td><td>${esc(v ? `${v.brand} ${v.model}` : '?')}${v?.source === 'uploaded' ? '' : ' <i>(no table uploaded)</i>'}</td><td><b>${ch}</b></td><td>${f}</td>${d.powerPlanned || (d.takeoffLocked && d.powerLocked) ? `<td><b>${esc(powerLabel(v, d.takeoffPowerIdx, d.firmware))}</b></td><td><b>${esc(powerLabel(v, d.flightPowerIdx, d.firmware))}</b></td>` : '<td colspan="2"><i>not planned — run Solve</i></td>'}<td>${FIRMWARES[d.firmware || 'betaflight'].name}</td><td>${esc(rxs.get(d.receiverId)?.name ?? '?')}</td><td>${r ? r.margin.toFixed(1) + ' dB' : ''}</td><td></td></tr>`;
     }
     html += '</table></div>';
   }
