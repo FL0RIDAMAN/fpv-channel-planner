@@ -19,7 +19,7 @@ export function initMap(el, h) {
     base[name] = L.tileLayer(url, { maxZoom: 16, maxNativeZoom: 16, attribution: 'USGS The National Map' });
   }
   base['USGS Topo'].addTo(map);
-  layers = { overlays: L.layerGroup().addTo(map), routes: L.layerGroup().addTo(map), teams: L.layerGroup().addTo(map), links: L.layerGroup().addTo(map), emitters: L.layerGroup().addTo(map) };
+  layers = { hover: null, overlays: L.layerGroup().addTo(map), routes: L.layerGroup().addTo(map), teams: L.layerGroup().addTo(map), links: L.layerGroup().addTo(map), emitters: L.layerGroup().addTo(map) };
   L.control.layers(base, { 'Routes & targets': layers.routes, 'Team links': layers.links, 'Site overlays': layers.overlays, 'Emitters': layers.emitters }).addTo(map);
   L.control.scale({ imperial: true }).addTo(map);
   map.on('click', e => handlers.onMapClick?.({ lat: e.latlng.lat, lon: e.latlng.lng }));
@@ -155,3 +155,22 @@ export function renderRoutes(state, plan, openDroneId) {
     }
   });
 }
+
+// Chart hover: aircraft and pilot at the same moment, joined by the line of sight.
+let hoverRenderer = null;
+export function showHover(drone, pilot, los, color) {
+  if (!layers.hover) {
+    const pane = map.createPane('chartHover');
+    pane.style.zIndex = 700; // above route and team markers
+    pane.style.pointerEvents = 'none';
+    hoverRenderer = L.svg({ pane: 'chartHover' });
+    layers.hover = L.layerGroup().addTo(map);
+  }
+  layers.hover.clearLayers();
+  const o = { pane: 'chartHover', renderer: hoverRenderer, interactive: false };
+  L.polyline([[pilot.lat, pilot.lon], [drone.lat, drone.lon]], { ...o, color: los ? '#1a7f37' : '#c62828', weight: 4, dashArray: los ? null : '7 5' }).addTo(layers.hover);
+  L.circleMarker([pilot.lat, pilot.lon], { ...o, radius: 7, color: '#fff', weight: 2.5, fillColor: '#111', fillOpacity: 1 }).addTo(layers.hover);
+  L.circleMarker([drone.lat, drone.lon], { ...o, radius: 11, color: '#fff', weight: 3, fillColor: color, fillOpacity: 1 }).addTo(layers.hover);
+  L.circleMarker([drone.lat, drone.lon], { ...o, radius: 17, color, weight: 2, fill: false, opacity: 0.8 }).addTo(layers.hover);
+}
+export function clearHover() { layers.hover?.clearLayers(); }

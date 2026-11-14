@@ -4,7 +4,7 @@ import { buildScenario, evaluate, pairMatrix, linkProfile } from './rf.js';
 import { solve } from './solver.js';
 import { parseAny, channelsOf, chanName } from './vtxtable.js';
 import { ensureBounds, terrainStats, DEM_Z, DEM_URL, TILE_CACHE } from './terrain.js';
-import { initMap, setView, renderSiteOverlays, renderTeams, renderEmitters, renderRoutes, fitTeams, getMap, BASEMAPS } from './mapview.js';
+import { initMap, setView, renderSiteOverlays, renderTeams, renderEmitters, renderRoutes, fitTeams, getMap, showHover, clearHover, BASEMAPS } from './mapview.js';
 import { firmwareCommands, channelCardHtml, downloadText, powerLabel } from './export.js';
 import { FIRMWARES, fwSupports } from './firmware.js';
 import { distM, fmtDist, tilesForBounds } from './geo.js';
@@ -680,7 +680,7 @@ function profileSvg(lp, color) {
   const clip = v => Math.min(hi, Math.max(lo, v));
   const line = lp.samples.filter(s => !s.loiter).map((s, i) => `${i ? 'L' : 'M'}${x(s.along).toFixed(1)},${y(clip(s.dbm)).toFixed(1)}`).join('');
   const blocked = lp.runs.map(r => `<rect x="${x(r.from)}" y="4" width="${Math.max(2, x(r.to) - x(r.from))}" height="${H - 20}" fill="#c62828" fill-opacity=".18"/>`).join('');
-  return h('div', { html: `<svg class="spectrum" viewBox="0 0 ${W} ${H}" role="img" aria-label="Video signal along route">
+  const chart = h('div', { html: `<svg class="spectrum profile" viewBox="0 0 ${W} ${H}" role="img" aria-label="Video signal along route — hover to see the point on the map">
     ${blocked}
     <line x1="${pad}" x2="${W - 4}" y1="${y(lp.threshold)}" y2="${y(lp.threshold)}" stroke="#c62828" stroke-dasharray="4 3" stroke-width="1"/>
     <text x="${W - 6}" y="${y(lp.threshold) - 3}" font-size="9" text-anchor="end" fill="#c62828">picture breaks up</text>
@@ -688,14 +688,50 @@ function profileSvg(lp, color) {
     <text x="${pad}" y="${H - 4}" font-size="9" fill="currentColor" fill-opacity=".6">0</text>
     <text x="${W - 4}" y="${H - 4}" font-size="9" text-anchor="end" fill="currentColor" fill-opacity=".6">${fmtDist(lp.length)}</text>
     <text x="2" y="${y(hi) + 8}" font-size="9" fill="currentColor" fill-opacity=".6">${Math.round(hi)}</text>
-    <text x="2" y="${y(lo)}" font-size="9" fill="currentColor" fill-opacity=".6">${Math.round(lo)}</text></svg>` });
+    <text x="2" y="${y(lo)}" font-size="9" fill="currentColor" fill-opacity=".6">${Math.round(lo)}</text>
+    <g class="cursor" style="display:none"><line y1="2" y2="${H - 16}" stroke="currentColor" stroke-opacity=".7" stroke-width="1"/><circle r="3.5" fill="${color}" stroke="#fff" stroke-width="1.5"/></g></svg>` });
+
+  // Hover / touch: cursor + readout on the chart, aircraft and pilot positions on the map.
+  const wrap = h('div', { class: 'profile-wrap' }, chart, h('div', { class: 'profile-tip', hidden: true }));
+  const svg = chart.querySelector('svg'), cur = svg.querySelector('.cursor'), tip = wrap.querySelector('.profile-tip');
+  const pts = lp.samples.filter(q => !q.loiter);
+  const pick = e => {
+    const r = svg.getBoundingClientRect();
+    const vx = (e.clientX - r.left) / r.width * W;
+    const along = Math.min(lp.length, Math.max(0, (vx - pad) / (W - pad - 4) * lp.length));
+    let best = pts[0];
+    for (const q of pts) if (Math.abs(q.along - along) < Math.abs(best.along - along)) best = q;
+    return best;
+  };
+  const show = e => {
+    const q = pick(e);
+    const cx = x(q.along), cy = y(clip(q.dbm));
+    cur.style.display = '';
+    cur.querySelector('line').setAttribute('x1', cx); cur.querySelector('line').setAttribute('x2', cx);
+    cur.querySelector('circle').setAttribute('cx', cx); cur.querySelector('circle').setAttribute('cy', cy);
+    const margin = q.dbm - lp.threshold;
+    tip.hidden = false;
+    tip.replaceChildren(
+      h('b', null, `${fmtDist(q.along)} along`), ` · ${Math.round(q.dbm)} dBm (${margin >= 0 ? '+' : ''}${margin.toFixed(0)} dB) · `,
+      h('span', { class: q.los ? 'ok-text' : 'bad-text' }, q.los ? 'clear line of sight' : `blocked by terrain (−${Math.round(q.diffDb)} dB)`),
+      h('br'), `Aircraft ${toMgrs(q.drone.lat, q.drone.lon) ?? ''} · ${Math.round(q.drone.alt)} m AGL · ${fmtDist(distM(q.drone, q.pilot))} from pilots`);
+    const pct = Math.min(Math.max(cx / W, 0.15), 0.85);
+    tip.style.left = `${pct * 100}%`;
+    showHover(q.drone, q.pilot, q.los, color);
+  };
+  const hide = () => { cur.style.display = 'none'; tip.hidden = true; clearHover(); };
+  svg.addEventListener('pointermove', show);
+  svg.addEventListener('pointerdown', e => { show(e); const q = pick(e); getMap().panTo([q.drone.lat, q.drone.lon]); });
+  svg.addEventListener('pointerleave', hide);
+  svg.addEventListener('pointercancel', hide);
+  return wrap;
 }
 
 function linkSection(scn) {
   const items = scn.nodes.map((n, i) => ({ n, lp: plan.profiles?.[i] })).filter(x => x.lp);
   if (!items.length) return [];
   const out = [h('h3', null, 'Video link along routes')];
-  out.push(h('div', { class: 'muted small-text' }, 'Each aircraft\'s own video signal along its route, with terrain between it and the pilots (pilots moving in step if they have a pilot track). Red bands are where a ridge blocks the line of sight.'));
+  out.push(h('div', { class: 'muted small-text' }, 'Each aircraft\'s own video signal along its route, with terrain between it and the pilots (pilots moving in step if they have a pilot track). Red bands are where a ridge blocks the line of sight. Hover over a chart (or drag a finger along it) to see that moment on the map; click to centre the map there.'));
   for (const { n, lp } of items) {
     const low = lp.samples.filter(s => !s.loiter && s.dbm < lp.threshold).length;
     out.push(h('div', { class: 'card' },

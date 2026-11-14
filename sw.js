@@ -1,5 +1,5 @@
 // Offline support: app shell is precached; map + terrain tiles are cache-first.
-const SHELL = 'fpv-shell-v8';
+const SHELL = 'fpv-shell-v9';
 const TILES = 'fpv-tiles-v1';
 const ASSETS = [
   './', 'index.html', 'manual.html', 'css/manual.css', 'manifest.webmanifest', 'css/app.css', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
