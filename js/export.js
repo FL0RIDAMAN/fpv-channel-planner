@@ -89,6 +89,12 @@ export function channelCardHtml(state, plan, siteName) {
     const ds = state.drones.filter(d => d.teamId === t.id && d.active);
     if (!ds.length) continue;
     html += `<div class="team-block"><h3>${esc(t.name)}</h3><div>Launch point <b>${t.lat != null ? (toMgrs(t.lat, t.lon) ?? '') : 'not set'}</b>${t.lat != null ? ` (${t.lat.toFixed(5)}, ${t.lon.toFixed(5)})` : ''} · radius ${t.radiusM} m · ${t.altM} m AGL${t.start ? ` · ${t.start}–${t.end}` : ''}</div>`;
+    const rt = (t.route || []).filter(w => w.lat != null);
+    if (rt.length) html += `<div>Route: ${rt.map((w, k) => `WP${k + 1} ${toMgrs(w.lat, w.lon) ?? ''} @ ${w.altM ?? t.altM} m AGL`).join(' → ')}${t.rtl !== false ? ' → RTL' : ''}</div>`;
+    const pt = (t.pilotTrack || []).filter(w => w.lat != null);
+    if (pt.length) html += `<div>Pilot movement: ${pt.map(w => toMgrs(w.lat, w.lon) ?? '').join(' → ')}</div>`;
+    const tg = ds.filter(d => d.target?.lat != null);
+    if (tg.length) html += `<div>Targets: ${tg.map(d => `${esc(d.callsign)} ${toMgrs(d.target.lat, d.target.lon) ?? ''}${d.flightMode === 'auto' ? ' (auto)' : ''}`).join(' · ')}</div>`;
     html += '<table><tr><th>Callsign</th><th>Pilot</th><th>VTX</th><th>Channel</th><th>MHz</th><th>Takeoff → flight</th><th>FC</th><th>Receiver</th><th>Margin</th><th>✓</th></tr>';
     for (const d of ds) {
       const v = d.vtx, r = resBy.get(d.id);

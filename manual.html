@@ -19,6 +19,7 @@
     <li><a href="#teams">Teams &amp; Aircraft tab</a></li>
     <li><a href="#pull-table">Uploading VTX tables</a></li>
     <li><a href="#goggles">Goggles tab</a></li>
+    <li><a href="#routes">Routes, targets &amp; moving pilots</a></li>
     <li><a href="#environment">Environment tab</a></li>
     <li><a href="#solve">Solving</a></li>
     <li><a href="#reading">Reading the Plan tab</a></li>
@@ -45,11 +46,11 @@
 <div class="warn"><b>Planning estimates, not guarantees.</b> The planner predicts interference from published-style figures and terrain data. Always confirm on site with a goggle or spectrum scan before launch. Transmit only on frequencies and power levels you are authorized to use at that location.</div>
 
 <!-- ============================================================ -->
-<h2 id="quickstart">1. Quick start</h2>
+<h2 id="quickstart">Quick start</h2>
 <p>The planner opens blank. You enter each team and its aircraft yourself.</p>
 <ol class="steps">
   <li><b>Pick the site</b> in the top bar (MWTC, Washington DC, or Custom). The map moves there.</li>
-  <li><b>+ Add first team</b>. Give it a name and its <b>launch point</b>: type an MGRS grid or lat/long, or press <i>📍 Pick on map</i> and tap the spot. Then set the flying radius, flying height, and (optionally) start and end times.</li>
+  <li><b>+ Add first team</b>. A new team card appears with the cursor in its <b>Launch point</b> field. Type an MGRS grid or lat/long and press <b>Enter</b>, or press <i>📍 Map</i> and tap the spot. Rename the team if you like, then set the flying radius, flying height, and (optionally) start and end times.</li>
   <li><b>+ Add aircraft</b> inside the team card. Enter the <b>callsign</b>, <b>pilot name</b>, flight controller and goggles.</li>
   <li>Pick the <b>VTX model</b>, then <b>⬆ Upload VTX table file</b> (or <i>Paste table</i>) with the table pulled from that quad (<a href="#pull-table">how</a>).</li>
   <li>Set <b>Takeoff / landing</b> power and <b>In flight</b> power.</li>
@@ -61,7 +62,7 @@
 <div class="tip">Want to look around first? <b>☰ → Load example (this site)</b> loads a complete 12-aircraft, 3-team plan. <b>☰ → New mission</b> clears it again.</div>
 
 <!-- ============================================================ -->
-<h2 id="install">2. Installing &amp; offline use</h2>
+<h2 id="install">Installing &amp; offline use</h2>
 <h3>Mac and Windows</h3>
 <p>Open the planner's address in Chrome or Edge. Click the <i>Install</i> icon in the address bar (or browser menu → <i>Install FPV Channel Planner</i>). It then opens in its own window like a normal app.</p>
 <p>To run it from a local copy of the folder:</p>
@@ -80,7 +81,7 @@
 <div class="tip">If terrain did not download for an area, the planner still works but treats those paths as clear line-of-sight (worst case). The Teams and Environment tabs say when this is happening.</div>
 
 <!-- ============================================================ -->
-<h2 id="concepts">3. Key concepts</h2>
+<h2 id="concepts">Key concepts</h2>
 <table>
   <tr><th>Term</th><th>What it means for planning</th></tr>
   <tr><td>Channel spacing</td><td>An analog video signal is about 18–20 MHz wide. Pilots in the same area want at least ~37 MHz between channels (Raceband spacing); closer than that and you see lines or a second picture.</td></tr>
@@ -93,7 +94,7 @@
 </table>
 
 <!-- ============================================================ -->
-<h2 id="teams">4. Teams &amp; Aircraft tab</h2>
+<h2 id="teams">Teams &amp; Aircraft tab</h2>
 <p>Everything about who is flying what, and where, is entered here. Each team is a card, and its aircraft are listed inside it.</p>
 <h3>Team fields</h3>
 <table>
@@ -129,7 +130,7 @@
   <tr><td>Flight controller</td><td>Betaflight, INAV or ArduPilot. The solver only offers channels that firmware can command, and models the power it will actually use. A power marked <b>*</b> is one the firmware rounds.</td></tr>
   <tr><td>Goggles / receiver</td><td>What the pilot watches this aircraft on (edit the list on the <a href="#goggles">Goggles tab</a>).</td></tr>
   <tr><td>VTX model</td><td>Starting template for this quad's VTX: brand, type, control protocol and an approximate table. Choose "Other — Unlisted" if yours isn't there.</td></tr>
-  <tr><td>⬆ Upload VTX table file / Paste table</td><td>Replaces the template with this quad's real table. See <a href="#pull-table">section 5</a>.</td></tr>
+  <tr><td>⬆ Upload VTX table file / Paste table</td><td>Replaces the template with this quad's real table. See <a href="#pull-table">Uploading VTX tables</a>.</td></tr>
   <tr><td><b>Takeoff / landing</b> power</td><td>VTX power while on the ground and near the launch point, usually the lowest level. The planner uses it for the teammate takeoff spacing case.</td></tr>
   <tr><td><b>In flight</b> power</td><td>VTX power once airborne, usually much higher. The planner uses it for the pilot's own link and for interference to everyone else. With "Also adjust in-flight VTX power" on, the solver may raise or lower it. Tick <i>Lock flight power</i> to stop that.</td></tr>
 </table>
@@ -147,7 +148,7 @@
 <p><b>+ Add aircraft</b> copies the previous aircraft in the team: VTX, table, powers, firmware, goggles and antennas. Only the callsign and pilot are cleared. A copied table is marked <i>copied table</i> until you upload that quad's own.</p>
 
 <!-- ============================================================ -->
-<h2 id="pull-table">5. Uploading VTX tables</h2>
+<h2 id="pull-table">Uploading VTX tables</h2>
 <p>A VTX table lists the exact frequencies and power levels a quad's VTX is configured for. Upload one for every aircraft. The presets are approximate templates only.</p>
 <h3>From a Betaflight quad</h3>
 <ol class="steps">
@@ -177,11 +178,68 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 <p>Power labels are read as mW (<code>25</code>, <code>200</code>) or W (<code>1W</code>, <code>1.6W</code>). Labels like <code>PIT</code> are kept but never planned as a flight power. A frequency of <code>0</code> disables that channel.</p>
 
 <!-- ============================================================ -->
-<h2 id="goggles">6. Goggles tab</h2>
+<h2 id="goggles">Goggles tab</h2>
 <p>Each receiver has a tunable range, filter quality (selectivity), noise figure, IIP3 (resistance to intermodulation), and the signal quality it needs for a clean picture (required SIR and SNR). The figures are estimates. If a receiver performs better or worse in the field, adjust them. Raising <i>Required SIR</i> makes the plan more conservative. Use <b>+ Receiver</b> for goggles that aren't listed.</p>
 
 <!-- ============================================================ -->
-<h2 id="environment">7. Environment tab</h2>
+<h2 id="routes">Routes, targets &amp; moving pilots</h2>
+<p>Without a route, a team's aircraft are planned as flying anywhere inside its radius, with worst-case positions. A route tells the planner where they will actually be. That makes the channel plan less pessimistic, and it lets the planner check the video link against the terrain along the way.</p>
+
+<h3>Team route</h3>
+<p>One route per team, flown from the launch point, in the team card's <b>Route</b> section:</p>
+<ul>
+  <li><b>✏️ Draw on map</b>: every tap adds the next waypoint. Use <i>Undo</i> to remove the last one and <i>Done</i> when finished. You can drag the numbered markers on the map afterwards.</li>
+  <li><b>+ Waypoint</b>: add a row and type its MGRS grid or lat/long (<a href="#coords">formats</a>), or press <i>📍 Map</i>.</li>
+  <li><b>Import from ATAK (KML/KMZ)</b>: pick a file exported from ATAK, Google Earth or similar. The card lists what's in the file: use a line as the <i>route</i> or <i>pilot movement</i>, or add points as waypoints. Altitudes in the file are ignored, and each waypoint gets the team's flying height.</li>
+  <li><b>AGL m</b> on each waypoint is the height above the ground there.</li>
+  <li><b>Return to launch</b>: ends the route back at the launch point.</li>
+  <li><b>Corridor ±</b>: how far aircraft may stray either side of the route. Used for interference.</li>
+</ul>
+
+<h3>Targets (per aircraft)</h3>
+<p>In an aircraft's <b>Mission</b> section, <b>+ Add target</b> gives that aircraft its own point to fly to after the team route (or straight from the launch point if there's no route). Set its grid, height AGL, <b>loiter radius</b> (the area it works in around the target) and <b>loiter time</b>. On the map it shows as ⊕ with a dashed circle.</p>
+
+<h3>Hand-flown or autonomous</h3>
+<p><b>How it's flown</b> is set per aircraft:</p>
+<ul>
+  <li><b>Hand-flown:</b> the route and target are used for planning only.</li>
+  <li><b>Autonomous mission:</b> INAV and ArduPilot only. The aircraft also gets mission file downloads:</li>
+</ul>
+<table>
+  <tr><th>Firmware</th><th>File</th><th>Load it with</th></tr>
+  <tr><td>ArduPilot</td><td><code>.waypoints</code></td><td><b>Mission Planner</b>: PLAN → <i>Load WP File</i>, then <i>Write WPs</i>.</td></tr>
+  <tr><td>ArduPilot</td><td><code>.plan</code></td><td><b>QGroundControl</b>: Plan view → <i>File → Open</i>, then <i>Upload</i>.</td></tr>
+  <tr><td>INAV</td><td><code>.mission</code></td><td><b>INAV Configurator</b>: Mission Control → <i>Load mission file</i>, then <i>Save to FC</i>.</td></tr>
+</table>
+<p>What the mission contains:</p>
+<ul>
+  <li><b>Sequence:</b> takeoff (ArduPilot only), each waypoint, then the target. If the target has a loiter time, ArduPilot uses LOITER_TIME and INAV uses POSHOLD_TIME. Return to launch comes last if it's ticked.</li>
+  <li><b>Heights:</b> written relative to home. The planner converts each waypoint's AGL using the terrain model, so the aircraft is at the planned height above the ground at every waypoint. A waypoint on a ridge 400 m above the launch point therefore shows up as about 460 m in the ground station.</li>
+</ul>
+<div class="warn">
+  <ul>
+    <li><b>Ground clearance:</b> between waypoints the aircraft flies straight, so check the legs for clearance in your ground station's terrain view. The terrain data is ~30 m resolution with no trees, wires or buildings.</li>
+    <li><b>Check after loading:</b> always look over the mission in Mission Planner, QGC or INAV Configurator before uploading. For INAV in particular, check that the final RTH and the POSHOLD_TIME hold come through as expected.</li>
+  </ul>
+</div>
+
+<h3>Moving pilots</h3>
+<p>The <b>Pilot movement</b> section lists the positions the pilots move through after the launch point. You can draw them or type them, just like waypoints. The planner assumes the pilots move along this track <i>in step with the aircraft</i>: halfway along the route, the pilots are halfway along their track. It uses every pilot position both for the video link check and for interference from other teams.</p>
+
+<h3>Video link along routes</h3>
+<p>On the <b>Plan</b> tab, each aircraft with a route or target gets a chart of its own video signal along the way. It shows the terrain between the aircraft and the (possibly moving) pilots, plus a dashed line where the picture breaks up.</p>
+<ul>
+  <li><b>Red bands</b> on the chart, and thick red lines on the map, are where a ridge blocks the line of sight.</li>
+  <li><b>For each blocked stretch</b> the planner gives the height the aircraft would need there to see the pilots. Climb, move the pilots (a pilot track), or change the route.</li>
+  <li><b>Show</b> centres the map on that stretch.</li>
+</ul>
+<p>Analog video drops out fast once it loses line of sight, so these stretches matter more than raw range.</p>
+
+<h3>ATAK export</h3>
+<p><b>☰ → Export plan to ATAK (KML)</b> saves one KML with each team's launch point, route, waypoints, pilot movement and targets, in team colours. Each launch point's description lists the aircraft, pilots and assigned channels. Import it in ATAK with the Import Manager. The KML uses standard Placemark points and lines; styling can vary between ATAK versions.</p>
+
+<!-- ============================================================ -->
+<h2 id="environment">Environment tab</h2>
 <ul>
   <li><b>Noise rise</b> — raises the noise floor for city RF clutter (DC defaults to 6 dB).</li>
   <li><b>Extra loss when blocked</b> — terrain data is bare earth (no trees or buildings). Leave at 0 to be conservative, or add 5–15 dB for dense forest or city blocks if you want credit for them.</li>
@@ -190,7 +248,7 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 </ul>
 
 <!-- ============================================================ -->
-<h2 id="solve">8. Solving</h2>
+<h2 id="solve">Solving</h2>
 <p>Press <b>Solve channels</b> (top bar or Plan tab). In a second or two the solver tries thousands of channel combinations from every VTX table and picks the one where the <b>worst</b> pilot has the most margin.</p>
 <ul>
   <li><b>Also adjust in-flight VTX power</b>: raises the <i>in-flight</i> power on links that are too weak, and lowers it everywhere else, while keeping every link at least 3 dB above its threshold. Lower power reduces interference and detectability. Takeoff power is never changed; aircraft with <i>Lock flight power</i> are left alone.</li>
@@ -200,7 +258,7 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 <p>Solving starts from random points, so two runs can give different (equally good) plans. Re-solve after any change.</p>
 
 <!-- ============================================================ -->
-<h2 id="reading">9. Reading the Plan tab</h2>
+<h2 id="reading">Reading the Plan tab</h2>
 <p><b>Worst link margin</b> is the headline: <span style="color:#1a7f37">≥ 3 dB OK</span>, <span style="color:#b06a00">0–3 dB marginal</span>, <span style="color:#c62828">&lt; 0 conflict</span>.</p>
 <table>
   <tr><th>Column</th><th>Meaning</th></tr>
@@ -223,15 +281,17 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="export">10. Exports</h2>
+<h2 id="export">Exports</h2>
 <ul>
   <li><b>Channel card (print)</b>: one table per team with callsign, pilot, VTX, channel, MHz, takeoff → flight power, flight controller, goggles, margin, and a check-box column. Print it or "Save as PDF".</li>
-  <li><b>Flight controller commands</b> — choose <i>All drones</i> or one drone. Commands are grouped by firmware (Betaflight CLI, INAV CLI, ArduPilot parameter file). Each sets the channel and the <b>takeoff</b> power, and either sets up the power switch or notes the flight power to switch to after takeoff. <i>Download</i> for a single ArduPilot drone saves a <code>.param</code> file. Apply them as described in <a href="#firmware">section 11</a>.</li>
-  <li><b>Save mission file</b> — the whole plan, including your equipment library, as <code>.fpvplan.json</code>.</li>
+  <li><b>Flight controller commands</b> — choose <i>All drones</i> or one drone. Commands are grouped by firmware (Betaflight CLI, INAV CLI, ArduPilot parameter file). Each sets the channel and the <b>takeoff</b> power, and either sets up the power switch or notes the flight power to switch to after takeoff. <i>Download</i> for a single ArduPilot drone saves a <code>.param</code> file. Apply them as described in <a href="#firmware">Flight controller setup</a>.</li>
+  <li><b>Mission files</b>: per autonomous aircraft. See <a href="#routes">Routes</a>.</li>
+  <li><b>Export plan to ATAK (KML)</b>: launch points, routes, pilot movement and targets.</li>
+  <li><b>Save mission file</b>: the whole plan, as <code>.fpvplan.json</code>.</li>
 </ul>
 
 <!-- ============================================================ -->
-<h2 id="firmware">11. Flight controller setup</h2>
+<h2 id="firmware">Flight controller setup</h2>
 <p>All three firmwares can set the VTX channel and power for you, provided the VTX control wire is connected and configured. The common pieces:</p>
 <ul>
   <li><b>SmartAudio</b> (TBS, Rush, Foxeer, GEPRC, most analog VTXs) and <b>IRC Tramp</b> use one wire from the VTX to a UART <b>TX</b> pin on the flight controller.</li>
@@ -249,7 +309,7 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 <div class="warn"><b>Radio-side VTX control can overwrite the plan.</b> ExpressLRS's <i>VTX Administrator</i> and TBS Crossfire's VTX settings can push a band/channel/power to the FC when the radio connects. Turn these off, or set them to the planned values, on every pilot's radio.</div>
 
 <!-- -------------------------------- -->
-<h3 id="betaflight">11.1 Betaflight</h3>
+<h3 id="betaflight">Betaflight</h3>
 <p>Betaflight (4.1 and later) needs a <b>VTX table</b> loaded before it can control a SmartAudio, Tramp or HDZero VTX. The band, channel and power numbers in Betaflight are positions in that table, which is why the planner wants each quad's table.</p>
 
 <h4>One-time setup</h4>
@@ -312,7 +372,7 @@ save</code></pre>
 <div class="tip">If the quad's table differs from the one in the planner (different band order, missing channels, different power list), the numbers will point at the wrong channel. The comment line above each block gives the intended MHz and power — check it against the Video Transmitter tab.</div>
 
 <!-- -------------------------------- -->
-<h3 id="inav">11.2 INAV</h3>
+<h3 id="inav">INAV</h3>
 <p>INAV does <b>not</b> use Betaflight VTX tables. It has a built-in table with five 5.8 GHz bands. The planner knows this: for drones set to INAV it only uses these channels (so <b>no L band</b>), and it works out the power level number from the VTX's protocol.</p>
 <table>
   <tr><th>vtx_band</th><th>Band</th><th>Channels 1–8 (MHz)</th></tr>
@@ -375,7 +435,7 @@ save</code></pre>
 <div class="tip">You can also check or change these on the INAV Configurator's Configuration tab (VTX section) or from the OSD menu.</div>
 
 <!-- -------------------------------- -->
-<h3 id="ardupilot">11.3 ArduPilot</h3>
+<h3 id="ardupilot">ArduPilot</h3>
 <p>ArduPilot also has a built-in table. It includes the 5.8 GHz bands, <b>Low RaceBand</b> (same frequencies as Betaflight's L band), and 1.3 GHz, 3.3 GHz and "Band X" (4990–5200 MHz) bands. Unlike Betaflight and INAV, <b>band and channel numbers start at 0</b>, and <b>power is set in mW</b>.</p>
 <table>
   <tr><th>VTX_BAND</th><th>Band</th><th>Channels (VTX_CHANNEL 0 → 7), MHz</th></tr>
@@ -447,7 +507,7 @@ VTX_MAX_POWER,800</code></pre>
 <p>Without a switch, change <code>VTX_POWER</code> to the flight value from the GCS or the OSD parameter menu after takeoff.</p>
 
 <!-- -------------------------------- -->
-<h3 id="fw-compare">11.4 Side-by-side</h3>
+<h3 id="fw-compare">Side-by-side</h3>
 <table>
   <tr><th></th><th>Betaflight</th><th>INAV</th><th>ArduPilot</th></tr>
   <tr><td>Channel table</td><td>Per-quad <code>vtxtable</code> (import it)</td><td>Built in: A B E F R (+1.3 GHz)</td><td>Built in: A B E F R L, 1.3 / 3.3 GHz, X</td></tr>
@@ -461,7 +521,7 @@ VTX_MAX_POWER,800</code></pre>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="field">12. Field procedure</h2>
+<h2 id="field">Field procedure</h2>
 <ol class="steps">
   <li><b>Before departure:</b> solve, print channel cards, save the mission file, download offline maps for the area. Apply and verify settings on every aircraft at the bench.</li>
   <li><b>On arrival:</b> before anyone powers a VTX, scan the band with goggles or a spectrum analyzer. Add anything you find to Environment → External emitters and re-solve if needed.</li>
@@ -471,7 +531,7 @@ VTX_MAX_POWER,800</code></pre>
 </ol>
 
 <!-- ============================================================ -->
-<h2 id="trouble">13. Troubleshooting</h2>
+<h2 id="trouble">Troubleshooting</h2>
 <table>
   <tr><th>Symptom</th><th>Likely cause / fix</th></tr>
   <tr><td>Commands accepted but VTX doesn't change</td><td>Control wire not on a TX pin or wrong UART; peripheral/protocol not set; Betaflight has no VTX table loaded. INAV: try <code>vtx_smartaudio_stopbits = 1</code> (TBS Sixty9) or the AKK workaround. ArduPilot: <code>SERIALx_OPTIONS</code> 4 → 68; check <code>VTX_ENABLE = 1</code> and reboot.</td></tr>
@@ -483,11 +543,13 @@ VTX_MAX_POWER,800</code></pre>
   <tr><td>Planner says OK but there's interference on site</td><td>Unlisted emitter (scan and add it), a VTX off-frequency (enter <i>Measured freq. offset</i>), a teammate launching closer than planned, or reflections in urban areas. Raise <i>Required SIR</i> for that receiver.</td></tr>
   <tr><td>Planner says conflict but it flies fine</td><td>The model is conservative (worst-case positions, bare-earth terrain, 6 dB fade margin). Calibrate the receiver figures or fade margin from experience.</td></tr>
   <tr><td>Launch point lands in the wrong place</td><td>Lat/long typed in the wrong order (use N/S/E/W letters to be explicit), a missing minus sign on west longitudes, or the wrong MGRS grid zone (e.g. 11S vs 18S). Check the green conversion line under the field before pressing Enter.</td></tr>
+  <tr><td>Route stretch shown blocked although you can see it</td><td>Terrain data is bare earth at ~30 m, which can miss small gaps, and it ignores the curve of a valley floor below 30 m. Treat blocked stretches as "check this", and confirm with a range walk or a test flight.</td></tr>
+  <tr><td>Mission heights look too high in the ground station</td><td>They're relative to home but keep the planned AGL over higher ground, so a waypoint 400 m above the launch point shows as ~460 m. This is expected.</td></tr>
   <tr><td>Map is blank offline</td><td>That area or zoom level wasn't downloaded. Use ☰ → Download map + terrain while online.</td></tr>
 </table>
 
 <!-- ============================================================ -->
-<h2 id="model">14. How the model works</h2>
+<h2 id="model">How the model works</h2>
 <ul>
   <li><b>Own link:</b> your drone at the edge of the team circle, line-of-sight, minus the fade margin.</li>
   <li><b>Interference:</b> every other drone airborne at the same time, at flight power, at its worst-case position (19 sample points across its team circle). For teammates the planner checks two cases and uses whichever is worse: a teammate's drone in flight at the <i>in-flight spacing</i> (flight power), and a teammate taking off or landing at the <i>takeoff spacing</i> (takeoff power).</li>
@@ -499,7 +561,7 @@ VTX_MAX_POWER,800</code></pre>
 <p><b>Not modelled:</b> trees and buildings (except the optional extra loss), reflections and multipath, antenna radiation patterns (full gain is assumed toward every interferer), and 5th-order intermodulation. Receiver figures are generic estimates.</p>
 
 <!-- ============================================================ -->
-<h2 id="glossary">15. Glossary</h2>
+<h2 id="glossary">Glossary</h2>
 <table>
   <tr><td><b>AGL</b></td><td>Above ground level.</td></tr>
   <tr><td><b>C/I, SIR</b></td><td>Carrier-to-interference: wanted signal vs unwanted signal, in dB.</td></tr>

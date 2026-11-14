@@ -138,3 +138,14 @@ label.f input { width: 100%; }
 .map-hint[hidden] { display: none; }
 .map-hint { white-space: nowrap; max-width: calc(100% - 120px); }
 .map-hint button { background: #fff; color: #1f6feb; border: 0; font-weight: 600; }
+
+.coord-field.needs .coord-input { border-color: var(--accent); box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+
+/* Routes */
+.wp-row { display: flex; gap: 8px; align-items: flex-start; }
+.wp-row .coord-field { flex: 1; min-width: 0; }
+.wp-side { display: flex; gap: 6px; align-items: flex-end; padding-top: 16px; }
+.target-box { border-left: 3px solid var(--line); padding-left: 8px; margin: 4px 0; }
+.wp-dot { width: 20px; height: 20px; border-radius: 50%; color: #fff; font: 700 11px/20px system-ui, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 0 0 1px #0007; }
+.pilot-dot { width: 22px; height: 22px; border-radius: 4px; background: #fff; color: #111; font: 700 10px/18px system-ui, sans-serif; text-align: center; border: 2px solid; box-shadow: 0 0 0 1px #0005; }
+.tgt-dot { font: 700 24px/26px system-ui, sans-serif; text-align: center; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }

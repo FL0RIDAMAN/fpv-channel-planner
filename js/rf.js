@@ -5,6 +5,7 @@ import { elevationAt } from './terrain.js';
 import { SELECTIVITY } from './data.js';
 import { channelsOf } from './vtxtable.js';
 import { fwSupports, fwPowerMw, FIRMWARES } from './firmware.js';
+import { flightPath, flightSamples, pilotSamples, syncedPairs, pathKey } from './paths.js';
 
 const C = 299792458, RE = 8.49e6; // effective earth radius (k = 4/3)
 export const REF_F = 5800;
@@ -87,26 +88,42 @@ export function timeOverlap(a, b) {
   return a0 < b1 && b0 < a1;
 }
 
-function samplePositions(team) {
+function circleSamples(team) {
   const c = { lat: team.lat, lon: team.lon };
   const pts = [c];
   const r = Math.max(10, team.radiusM);
   for (let k = 0; k < 12; k++) pts.push(dest(c, k * 30, r));
   pts.push(...[0, 60, 120, 180, 240, 300].map(b => dest(c, b, r / 2)));
-  return pts.map(p => ({ ...p, hAgl: team.altM }));
+  return pts.map(p => ({ ...p, alt: team.altM }));
 }
 
-// Worst-case (minimum) path loss from anywhere in tx team's area to rx team's pilot position.
-function teamCoupling(rxTeam, txTeam) {
-  const pilot = { lat: rxTeam.lat, lon: rxTeam.lon, hAgl: rxTeam.pilotHeightM ?? 1.5 };
-  let best = null;
-  for (const p of samplePositions(txTeam)) {
-    const r = pathLoss(p, pilot);
-    if (!best || r.lossDb < best.lossDb) best = { ...r, at: p };
-  }
-  const center = pathLoss({ lat: txTeam.lat, lon: txTeam.lon, hAgl: txTeam.altM }, pilot);
-  return { ...best, centerDistM: center.distM, centerLossDb: center.lossDb, centerLos: center.los };
+// Where a team's (or one aircraft's) drones can be: along its route/target, or anywhere in the circle.
+function txSamples(team, drone) {
+  const path = flightPath(team, drone);
+  return path ? flightSamples(path, team.corridorM ?? 150) : circleSamples(team);
 }
+// Where a team's pilots can be (launch point plus pilot track).
+const rxSamples = team => pilotSamples(team);
+
+// Worst-case (minimum) loss between any pilot position and any aircraft position. Memoised.
+const couplingCache = new Map();
+function coupling(rxTeam, rxPts, txPts) {
+  const hRx = rxTeam.pilotHeightM ?? 1.5;
+  const key = `${hRx}|${pathKey(rxPts)}|${pathKey(txPts)}`;
+  const hit = couplingCache.get(key);
+  if (hit && hit.terrain) return hit;
+  let best = null;
+  for (const r of rxPts) for (const t of txPts) {
+    const res = pathLoss({ lat: t.lat, lon: t.lon, hAgl: t.alt }, { lat: r.lat, lon: r.lon, hAgl: hRx });
+    if (!best || res.lossDb < best.lossDb) best = { ...res, at: t, pilotAt: r };
+  }
+  const c = distM(rxPts[0], txPts[0]);
+  const out = { ...best, centerDistM: c };
+  if (couplingCache.size > 2000) couplingCache.clear();
+  couplingCache.set(key, out);
+  return out;
+}
+const teamCoupling = (rxTeam, txTeam) => coupling(rxTeam, rxSamples(rxTeam), txSamples(txTeam, null));
 
 // Build a frequency-independent scenario: gains per pair (excluding TX power).
 export function buildScenario(state) {
@@ -140,9 +157,16 @@ export function buildScenario(state) {
     });
   }
 
-  // Desired-link gain (excl. TX power): drone at edge of own area, LOS assumed (pilots keep LOS).
+  // Desired-link gain (excl. TX power): drone at its furthest point from the pilots, LOS assumed.
+  // With a route this is the furthest synced pilot–aircraft distance; terrain blockage is reported separately.
   for (const n of nodes) {
-    const r = Math.max(50, n.drone.maxRangeM || n.team.radiusM);
+    n.path = flightPath(n.team, n.drone);
+    let r = Math.max(50, n.drone.maxRangeM || n.team.radiusM);
+    if (n.path) {
+      r = 50;
+      for (const q of syncedPairs(n.team, n.path, 40)) r = Math.max(r, Math.hypot(distM(q.drone, q.pilot), q.drone.alt));
+      if (n.drone.maxRangeM) r = Math.max(r, n.drone.maxRangeM);
+    }
     n.desiredGain = n.drone.txGainDbi + n.drone.rxGainDbi - fspl(r, REF_F) - polLoss(n.drone.txPol, n.drone.rxPol, true) - (state.mission.fadeMarginDb ?? 6);
     n.desiredRangeM = r;
   }
@@ -171,7 +195,7 @@ export function buildScenario(state) {
       gainT[i * N + j] = tj.drone.txGainDbi + ri.drone.rxGainDbi - fspl(launch, REF_F) - pol(true);
       inf = { distM: fly, launchM: launch, los: true, terrain: false, diffDb: 0, sameTeam: true };
     } else {
-      const c = getTC(ri.team, tj.team);
+      const c = tj.path?.target ? coupling(ri.team, rxSamples(ri.team), txSamples(tj.team, tj.drone)) : getTC(ri.team, tj.team);
       loss = c.lossDb + (c.los ? 0 : nlosExtra); los = c.los;
       inf = { distM: c.distM, los: c.los, terrain: c.terrain, diffDb: c.diffDb, centerDistM: c.centerDistM };
     }
@@ -184,7 +208,7 @@ export function buildScenario(state) {
   for (const e of state.emitters || []) {
     if (e.lat == null) continue;
     nodes.forEach((n, i) => {
-      const p = pathLoss({ lat: e.lat, lon: e.lon, hAgl: e.heightM ?? 10 }, { lat: n.team.lat, lon: n.team.lon, hAgl: n.team.pilotHeightM ?? 1.5 });
+      const p = coupling(n.team, rxSamples(n.team), [{ lat: e.lat, lon: e.lon, alt: e.heightM ?? 10 }]);
       const pw = e.eirpDbm + n.drone.rxGainDbi - p.lossDb - (p.los ? 0 : nlosExtra) - polLoss('LIN', n.drone.rxPol, p.los);
       ext[i].push({ name: e.name, freq: e.freqMHz, bw: e.bwMHz || 20, powDbm: pw, info: p });
     });
@@ -193,6 +217,40 @@ export function buildScenario(state) {
 }
 
 const fAdj = f => 20 * log10(f / REF_F);
+
+// Own video link along an aircraft's route, with the pilots moving in step. Terrain-aware.
+// Returns samples [{along, dbm, los}] and blocked runs with the height needed to see the pilots.
+export function linkProfile(scn, i, pIdx) {
+  const n = scn.nodes[i];
+  if (!n.path) return null;
+  const hRx = n.team.pilotHeightM ?? 1.5;
+  const f = n.cands[n.cur]?.freq ?? REF_F;
+  const p = dbm(n.powersMw[pIdx] ?? 25) + n.drone.txGainDbi + n.drone.rxGainDbi;
+  const threshold = n.noiseDbm + n.reqSnr;
+  let terrain = true;
+  const samples = syncedPairs(n.team, n.path, 60).map(q => {
+    const r = pathLoss({ lat: q.drone.lat, lon: q.drone.lon, hAgl: q.drone.alt }, { lat: q.pilot.lat, lon: q.pilot.lon, hAgl: hRx }, f);
+    if (!r.terrain && r.distM >= 60) terrain = false; // very short paths skip terrain by design
+    return { ...q, dbm: p - r.lossDb - polLoss(n.drone.txPol, n.drone.rxPol, r.los), los: r.los, diffDb: r.diffDb };
+  });
+  const runs = [];
+  let cur = null;
+  for (const s of samples.filter(x => !x.loiter)) {
+    if (!s.los) { if (!cur) runs.push(cur = { from: s.along, to: s.along, worst: s }); cur.to = s.along; if (s.diffDb > cur.worst.diffDb) cur.worst = s; }
+    else cur = null;
+  }
+  const loiterBlocked = samples.filter(x => x.loiter && !x.los).length;
+  for (const run of runs) {
+    const w = run.worst;
+    run.minAgl = null;
+    for (let h = Math.ceil(w.drone.alt / 10) * 10 + 10; h <= 1000; h += 10) {
+      const r = pathLoss({ lat: w.drone.lat, lon: w.drone.lon, hAgl: h }, { lat: w.pilot.lat, lon: w.pilot.lon, hAgl: hRx }, f);
+      if (r.los) { run.minAgl = h; break; }
+    }
+    run.lat = w.drone.lat; run.lon = w.drone.lon;
+  }
+  return { samples, runs, loiterBlocked, threshold, terrain, length: n.path.length };
+}
 
 // Strongest received power (pre-filter) at receiver i from VTX j: in flight or at takeoff.
 function pairPower(scn, i, j, pF, pT, fj) {

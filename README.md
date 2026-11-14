@@ -34,6 +34,8 @@ The planner starts blank.
    - **Upload the `vtxtable` pulled from that quad.**
    - Set **takeoff** and **in-flight** VTX power.
    - Each new aircraft copies the previous one's setup.
+   - Optional: draw a **team route** (or import it from ATAK), add **pilot movement**, and give aircraft **targets**.
+   - Set each aircraft to **hand-flown** or **autonomous** (INAV/ArduPilot mission downloads).
 2. **Environment**: add urban noise and outside emitters (Wi-Fi, other units).
 3. **Solve**: review the Plan tab.
 4. **Export**: *Channel card (print)*, *Flight controller commands* (Betaflight/INAV CLI, ArduPilot `.param`, including the takeoff → flight power switch setup), and *Save mission file*.
@@ -78,6 +80,8 @@ js/mapview.js   Leaflet map
 js/export.js    channel card, Betaflight/INAV/ArduPilot commands
 js/firmware.js  INAV + ArduPilot built-in band/power tables
 js/coords.js    MGRS / UTM / lat-long parsing and formatting (WGS84)
+js/paths.js     routes, targets, moving pilots, sampling
+js/missions.js  .waypoints / .plan / INAV .mission export, KML export + KML/KMZ import
 manual.html     in-app user manual
 vendor/leaflet  Leaflet 1.9.4 (bundled for offline)
 ```

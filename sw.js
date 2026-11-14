@@ -1,12 +1,12 @@
 // Offline support: app shell is precached; map + terrain tiles are cache-first.
-const SHELL = 'fpv-shell-v5';
+const SHELL = 'fpv-shell-v6';
 const TILES = 'fpv-tiles-v1';
 const ASSETS = [
   './', 'index.html', 'manual.html', 'css/manual.css', 'manifest.webmanifest', 'css/app.css', 'icons/icon.svg', 'icons/icon-192.png', 'icons/icon-512.png',
   'vendor/leaflet/leaflet.js', 'vendor/leaflet/leaflet.css',
   'vendor/leaflet/images/marker-icon.png', 'vendor/leaflet/images/marker-icon-2x.png', 'vendor/leaflet/images/marker-shadow.png',
   'vendor/leaflet/images/layers.png', 'vendor/leaflet/images/layers-2x.png',
-  'js/app.js', 'js/data.js', 'js/store.js', 'js/rf.js', 'js/solver.js', 'js/vtxtable.js', 'js/terrain.js', 'js/mapview.js', 'js/export.js', 'js/geo.js', 'js/firmware.js', 'js/coords.js',
+  'js/app.js', 'js/data.js', 'js/store.js', 'js/rf.js', 'js/solver.js', 'js/vtxtable.js', 'js/terrain.js', 'js/mapview.js', 'js/export.js', 'js/geo.js', 'js/firmware.js', 'js/coords.js', 'js/paths.js', 'js/missions.js',
 ];
 const TILE_HOSTS = ['basemap.nationalmap.gov', 's3.amazonaws.com', 'elevation-tiles-prod.s3.amazonaws.com'];
 

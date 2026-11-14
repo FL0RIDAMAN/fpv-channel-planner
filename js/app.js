@@ -1,14 +1,16 @@
 import { SITES, ANTENNAS } from './data.js';
 import { load, save, emptyMission, exampleMission, newTeam, newDrone, uid, clone, migrate, TEMPLATES, templateKey, vtxFromTemplate } from './store.js';
-import { buildScenario, evaluate, pairMatrix } from './rf.js';
+import { buildScenario, evaluate, pairMatrix, linkProfile } from './rf.js';
 import { solve } from './solver.js';
 import { parseAny, channelsOf, chanName } from './vtxtable.js';
 import { ensureBounds, terrainStats, DEM_Z, DEM_URL, TILE_CACHE } from './terrain.js';
-import { initMap, setView, renderSiteOverlays, renderTeams, renderEmitters, fitTeams, getMap, BASEMAPS } from './mapview.js';
+import { initMap, setView, renderSiteOverlays, renderTeams, renderEmitters, renderRoutes, fitTeams, getMap, BASEMAPS } from './mapview.js';
 import { firmwareCommands, channelCardHtml, downloadText, powerLabel } from './export.js';
 import { FIRMWARES, fwSupports } from './firmware.js';
 import { distM, fmtDist, tilesForBounds } from './geo.js';
 import { parseCoord, toMgrs, fmtLatLon } from './coords.js';
+import { flightPath } from './paths.js';
+import { missionItems, toWaypointsFile, toQgcPlan, toInavMission, toKml, readKmlFile } from './missions.js';
 
 // ---------- state ----------
 let state = load() || emptyMission('mwtc');
@@ -66,6 +68,8 @@ function areaBounds() {
     pts.push([t.lat - dLat, t.lon - dLon], [t.lat + dLat, t.lon + dLon]);
   }
   for (const e of state.emitters) if (e.lat != null) pts.push([e.lat, e.lon]);
+  for (const t of state.teams) for (const w of [...(t.route || []), ...(t.pilotTrack || [])]) if (w.lat != null) pts.push([w.lat, w.lon]);
+  for (const d of state.drones) if (d.target?.lat != null) { const r = (d.target.loiterM || 0) / 111000; pts.push([d.target.lat - r, d.target.lon - r], [d.target.lat + r, d.target.lon + r]); }
   if (!pts.length) return null;
   const s = Math.min(...pts.map(p => p[0])) - 0.01, n = Math.max(...pts.map(p => p[0])) + 0.01;
   const w = Math.min(...pts.map(p => p[1])) - 0.01, e = Math.max(...pts.map(p => p[1])) + 0.01;
@@ -88,6 +92,7 @@ function evaluateCurrent() {
   const scn = buildScenario(state);
   const assign = scn.nodes.map(n => n.cur), pIdx = scn.nodes.map(n => n.pIdx);
   plan = scn.nodes.length ? { scn, assign, pIdx, ev: evaluate(scn, assign, pIdx, true) } : { scn, assign, pIdx, ev: null };
+  plan.profiles = scn.nodes.map((n, i) => linkProfile(scn, i, pIdx[i]));
 }
 
 async function runSolve() {
@@ -113,8 +118,14 @@ async function runSolve() {
 initMap($('#map'), {
   onMapClick: p => {
     if (!ui.placing) return;
-    const { kind, id } = ui.placing;
-    const obj = kind === 'team' ? byId(state.teams, id) : byId(state.emitters, id);
+    const { kind, id, list } = ui.placing;
+    if (kind === 'draw') {
+      const t = byId(state.teams, id), arr = t[list];
+      arr.push(list === 'route' ? { id: uid('w'), lat: p.lat, lon: p.lon, altM: arr[arr.length - 1]?.altM ?? t.altM } : { id: uid('w'), lat: p.lat, lon: p.lon });
+      commit();
+      return;
+    }
+    const obj = findPlaceable(id);
     if (obj) { obj.lat = p.lat; obj.lon = p.lon; }
     ui.placing = null;
     document.body.classList.remove('panel-hidden');
@@ -122,8 +133,26 @@ initMap($('#map'), {
   },
   onTeamMoved: (id, p) => { const t = byId(state.teams, id); Object.assign(t, p); commit(); },
   onEmitterMoved: (id, p) => { const e = byId(state.emitters, id); Object.assign(e, p); commit(); },
+  onPointMoved: (id, p) => { const o = findPlaceable(id); if (o) { Object.assign(o, p); commit(); } },
   onTeamClick: id => { ui.selectedTeam = id; ui.tab = 'teams'; render(); document.querySelectorAll('.team-card')[state.teams.findIndex(t => t.id === id)]?.scrollIntoView({ behavior: 'smooth', block: 'start' }); },
 });
+
+// Anything with a map position, by id: team launch points, emitters, waypoints, pilot positions, targets.
+function findPlaceable(id) {
+  for (const t of state.teams) {
+    if (t.id === id) return t;
+    const w = [...(t.route || []), ...(t.pilotTrack || [])].find(x => x.id === id);
+    if (w) return w;
+  }
+  return state.emitters.find(e => e.id === id) || state.drones.map(d => d.target).find(g => g?.id === id) || null;
+}
+
+// Drawing a route or pilot track: every map tap adds a point until Done.
+function startDraw(team, list) {
+  ui.placing = { kind: 'draw', id: team.id, list };
+  document.body.classList.add('panel-hidden');
+  render();
+}
 
 function startPlacing(kind, id, label) {
   ui.placing = { kind, id };
@@ -145,7 +174,7 @@ function farNote(p) {
 function coordField(label, obj, pickLabel, kind) {
   const has = obj.lat != null;
   const preview = h('div', { class: `coord-preview ${has ? 'ok' : ''}` }, has ? `${fmtLatLon(obj.lat, obj.lon)}` : 'Type MGRS (e.g. 11S KC 79808 48321) or lat, long — or pick on the map.');
-  const inp = h('input', { class: 'coord-input', value: has ? (toMgrs(obj.lat, obj.lon) ?? fmtLatLon(obj.lat, obj.lon)) : '', placeholder: 'MGRS or lat, long', autocomplete: 'off', spellcheck: 'false', 'aria-label': label });
+  const inp = h('input', { class: 'coord-input', 'data-for': obj.id, value: has ? (toMgrs(obj.lat, obj.lon) ?? fmtLatLon(obj.lat, obj.lon)) : '', placeholder: 'MGRS or lat, long', autocomplete: 'off', spellcheck: 'false', 'aria-label': label });
   const check = () => {
     const v = inp.value.trim();
     if (!v) { preview.textContent = ''; preview.className = 'coord-preview'; return null; }
@@ -158,9 +187,20 @@ function coordField(label, obj, pickLabel, kind) {
     } catch (e) { preview.textContent = e.message; preview.className = 'coord-preview bad'; return null; }
   };
   inp.oninput = check;
-  inp.onchange = () => { const p = check(); if (p) { obj.lat = p.lat; obj.lon = p.lon; getMap().setView([p.lat, p.lon], Math.max(getMap().getZoom(), 13)); commit(); } };
-  inp.onkeydown = e => { if (e.key === 'Enter') inp.blur(); };
-  return h('div', { class: 'coord-field' },
+  let applied = false;
+  const apply = () => {
+    if (applied) return;
+    const p = check();
+    if (!p) return;
+    applied = true;
+    obj.lat = p.lat; obj.lon = p.lon;
+    inp.blur();
+    getMap().setView([p.lat, p.lon], Math.max(getMap().getZoom(), 13));
+    commit();
+  };
+  inp.onchange = apply;
+  inp.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); apply(); } };
+  return h('div', { class: `coord-field ${has ? '' : 'needs'}` },
     h('div', { class: 'f-label' }, label),
     h('div', { class: 'row' }, inp,
       h('button', { class: 'small', title: 'Pick on the map', onclick: () => startPlacing(kind, obj.id, pickLabel) }, '📍 Map'),
@@ -170,20 +210,48 @@ function coordField(label, obj, pickLabel, kind) {
 
 // ---------- rendering ----------
 function render() {
+  if (ui.placing && !findPlaceable(ui.placing.id)) {
+    ui.placing = null;
+    document.body.classList.remove('panel-hidden');
+  }
   $('#missionName').value = state.mission.name;
   $('#siteSel').value = state.mission.site;
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === ui.tab));
   $('#mapHint').hidden = !ui.placing;
+  if (ui.placing?.kind === 'draw') {
+    const t = byId(state.teams, ui.placing.id), arr = t?.[ui.placing.list] || [];
+    const what = ui.placing.list === 'route' ? 'waypoints' : 'pilot positions';
+    $('#mapHint').replaceChildren(`Tap the map to add ${what} for ${t?.name} · ${arr.length} so far`,
+      h('button', { class: 'small', style: 'margin-left:10px', disabled: !arr.length || null, onclick: e => { e.stopPropagation(); arr.pop(); commit(); } }, 'Undo'),
+      h('button', { class: 'small', style: 'margin-left:6px', onclick: e => { e.stopPropagation(); cancelPlacing(); } }, 'Done'));
+  }
   $('#btnSolve').textContent = ui.solving ? 'Solving…' : 'Solve channels';
   $('#btnSolve').disabled = ui.solving;
   const body = $('#tabBody');
   const scroll = body.scrollTop;
+  // keep a coordinate field the user is typing in across redraws (value, cursor and focus)
+  const act = document.activeElement;
+  const keep = act && body.contains(act) && act.dataset?.for ? { id: act.dataset.for, value: act.value, start: act.selectionStart, end: act.selectionEnd } : null;
   body.replaceChildren(({ teams: renderTeamsTab, results: renderResultsTab, equipment: renderEquipmentTab, env: renderEnvTab })[ui.tab]());
   body.scrollTop = scroll;
+  if (keep) {
+    const el = body.querySelector(`.coord-input[data-for="${keep.id}"]`);
+    if (el) {
+      if (el.value !== keep.value) { el.value = keep.value; el.oninput?.(); }
+      el.focus({ preventScroll: true });
+      try { el.setSelectionRange(keep.start, keep.end); } catch { /* ignore */ }
+    }
+  }
+  if (ui.focusCoord) {
+    const inp = body.querySelector(`.coord-input[data-for="${ui.focusCoord}"]`);
+    ui.focusCoord = null;
+    if (inp) { inp.closest('.card')?.scrollIntoView({ block: 'start' }); inp.focus({ preventScroll: true }); }
+  }
   const links = new Map();
   if (plan?.scn) for (const [k, v] of plan.scn.teamCoupling) links.set(k, v);
   renderTeams(state, links, ui.selectedTeam);
   renderEmitters(state);
+  renderRoutes(state, plan, ui.openDrone);
 }
 
 // ---------- Teams & Aircraft ----------
@@ -256,6 +324,46 @@ function templateSelect(d) {
   })))));
 }
 
+function downloadMission(d, kind) {
+  const team = byId(state.teams, d.teamId);
+  const m = missionItems(team, d);
+  if (!m) return;
+  if (!m.terrainOk && !confirm('Terrain data isn\'t loaded for every waypoint, so some heights will be written as height above home instead of above the ground there. Download anyway?')) return;
+  const base = `${d.callsign || 'mission'}`.replace(/[^\w-]+/g, '_');
+  if (kind === 'waypoints') downloadText(`${base}.waypoints`, toWaypointsFile(m), 'text/plain');
+  if (kind === 'plan') downloadText(`${base}.plan`, toQgcPlan(m), 'application/json');
+  if (kind === 'inav') downloadText(`${base}.mission`, toInavMission(m), 'application/xml');
+}
+
+function missionSection(d) {
+  const team = byId(state.teams, d.teamId), fw = d.firmware || 'betaflight';
+  const canAuto = fw === 'inav' || fw === 'ardupilot';
+  if (!canAuto && d.flightMode === 'auto') d.flightMode = 'manual';
+  const g = d.target;
+  const path = team ? flightPath(team, d) : null;
+  return h('div', null,
+    h('div', { class: 'section-label' }, 'Mission'),
+    h('div', { class: 'grid' },
+      h('label', null, 'How it\'s flown', h('select', { onchange: e => { d.flightMode = e.target.value; commit(); } },
+        h('option', { value: 'manual', selected: d.flightMode !== 'auto' || null }, 'Hand-flown'),
+        h('option', { value: 'auto', selected: d.flightMode === 'auto' || null, disabled: !canAuto || null }, canAuto ? 'Autonomous mission' : 'Autonomous (INAV/ArduPilot only)')))),
+    g ? h('div', { class: 'target-box' },
+      coordField('Target', g, `${d.callsign}'s target`, 'point'),
+      h('div', { class: 'grid' },
+        num('Height AGL (m)', g, 'altM', { min: 1 }),
+        num('Loiter radius (m)', g, 'loiterM', { min: 0, title: 'Area the aircraft works in around the target (used for interference and the link check)' }),
+        num('Loiter time (min)', g, 'loiterMin', { min: 0, title: 'Autonomous missions hold here this long (0 = fly through)' }),
+        h('div', null, h('button', { class: 'small danger', onclick: () => { d.target = null; commit(); } }, '✕ Remove target'))))
+      : h('button', { class: 'small', onclick: () => { d.target = { id: uid('g'), lat: null, lon: null, altM: team?.altM ?? 60, loiterM: 150, loiterMin: 0 }; ui.focusCoord = d.target.id; commit(); } }, '+ Add target'),
+    h('div', { class: 'muted small-text', style: 'margin-top:4px' }, path ? `Flies ${team.route.length ? `the ${team.name} route` : 'from the launch point'}${g?.lat != null ? ' then to its target' : ''}${team.rtl !== false ? ', then returns to launch' : ''} · ${fmtDist(path.length)}.` : 'No route or target yet — planned as flying anywhere within the team radius.'),
+    d.flightMode === 'auto' && canAuto ? h('div', { class: 'row', style: 'margin-top:6px' },
+      !path ? h('span', { class: 'muted small-text' }, 'Add a team route or a target to export a mission.')
+        : fw === 'ardupilot' ? [
+          h('button', { class: 'small primary', onclick: () => downloadMission(d, 'waypoints') }, '⬇ Mission Planner (.waypoints)'),
+          h('button', { class: 'small', onclick: () => downloadMission(d, 'plan') }, '⬇ QGroundControl (.plan)')]
+          : h('button', { class: 'small primary', onclick: () => downloadMission(d, 'inav') }, '⬇ INAV Configurator (.mission)')) : null);
+}
+
 function droneEditor(d, r) {
   const v = d.vtx, rx = byId(state.receivers, d.receiverId), fw = d.firmware || 'betaflight';
   const cands = channelsOf(v).filter(c => (!rx || rx.ranges.some(([lo, hi]) => c.freq >= lo && c.freq <= hi)) && fwSupports(fw, c.freq));
@@ -283,6 +391,7 @@ function droneEditor(d, r) {
       sel('In flight', d, 'flightPowerIdx', powerOpts, { numeric: true, title: 'Power once airborne. The solver may change this unless locked.' })),
     h('div', { class: 'row' }, chk('Lock flight power (solver won\'t change it)', d, 'powerLocked')),
     (d.vtx.powers[d.flightPowerIdx]?.mW ?? 0) < (d.vtx.powers[d.takeoffPowerIdx]?.mW ?? 0) ? h('div', { class: 'warn-box' }, 'Flight power is lower than takeoff power — check these are the right way round.') : null,
+    missionSection(d),
     h('details', null, h('summary', { class: 'muted small-text' }, 'Advanced: channel lock, power switch, antennas, VTX details'),
       h('div', { class: 'grid', style: 'margin-top:6px' },
         h('label', null, 'Channel', h('select', {
@@ -303,7 +412,7 @@ function droneEditor(d, r) {
         num('Goggle antenna gain (dBi)', d, 'rxGainDbi', { title: ANTENNAS.map(a => a.name).join(', ') }), sel('Goggle antenna polarization', d, 'rxPol', polOpts))),
     h('div', { class: 'row', style: 'margin-top:8px' },
       h('button', { class: 'primary small', onclick: () => { ui.openDrone = null; render(); } }, 'Done'),
-      h('button', { class: 'small', onclick: () => { const c = newDrone(state, d.teamId); Object.assign(c, { ...clone(d), id: c.id, callsign: c.callsign, pilot: '', assign: null, locked: false }); c.vtx = { ...clone(d.vtx), source: d.vtx.source === 'uploaded' ? 'copied' : d.vtx.source, copiedFrom: d.callsign }; state.drones.splice(state.drones.indexOf(d) + 1, 0, c); ui.openDrone = c.id; commit(); } }, 'Duplicate'),
+      h('button', { class: 'small', onclick: () => { const c = newDrone(state, d.teamId); Object.assign(c, { ...clone(d), id: c.id, callsign: c.callsign, pilot: '', assign: null, locked: false, target: null }); c.vtx = { ...clone(d.vtx), source: d.vtx.source === 'uploaded' ? 'copied' : d.vtx.source, copiedFrom: d.callsign }; state.drones.splice(state.drones.indexOf(d) + 1, 0, c); ui.openDrone = c.id; commit(); } }, 'Duplicate'),
       h('button', { class: 'small danger', onclick: () => { if (confirm(`Remove ${d.callsign}?`)) { state.drones = state.drones.filter(x => x !== d); commit(); } } }, 'Remove')),
   );
 }
@@ -326,8 +435,74 @@ function droneRow(d) {
       badge,
       r && d.assign ? h('span', { class: `st ${status(r.margin)}` }, `${r.margin.toFixed(1)} dB`) : null,
       h('span', { class: 'chev' }, open ? '▾' : '▸')),
-    h('div', { class: 'drone-sub muted small-text' }, `${v.brand} ${v.model} · ${FIRMWARES[fw].name} · ${byId(state.receivers, d.receiverId)?.name ?? 'no goggles'}`),
+    h('div', { class: 'drone-sub muted small-text' }, `${v.brand} ${v.model} · ${FIRMWARES[fw].name}${d.flightMode === 'auto' ? ' · autonomous' : ''}${d.target?.lat != null ? ' · has target' : ''} · ${byId(state.receivers, d.receiverId)?.name ?? 'no goggles'}`),
     open ? droneEditor(d, r) : null);
+}
+
+function pointRow(t, list, w, i) {
+  const isRoute = list === 'route';
+  return h('div', { class: 'wp-row' },
+    coordField(isRoute ? `WP${i + 1}` : `Pilot position ${i + 2}`, w, `${t.name} ${isRoute ? `WP${i + 1}` : `pilot position ${i + 2}`}`, 'point'),
+    h('div', { class: 'wp-side' },
+      isRoute ? h('label', { class: 'f' }, 'AGL m', h('input', { type: 'number', min: 1, value: w.altM ?? t.altM, style: 'width:70px', onchange: e => { w.altM = Number(e.target.value) || t.altM; commit(); } })) : null,
+      h('button', { class: 'small danger', title: 'Remove', onclick: () => { t[list] = t[list].filter(x => x !== w); commit(); } }, '✕')));
+}
+
+function kmlChooser(t) {
+  const k = ui.kmlImport;
+  if (!k || k.teamId !== t.id) return null;
+  const toPts = (it, withAlt) => it.pts.map(p => withAlt ? { id: uid('w'), lat: p.lat, lon: p.lon, altM: t.altM } : { id: uid('w'), lat: p.lat, lon: p.lon });
+  const dropLaunch = pts => (t.lat != null && pts.length && distM(t, pts[0]) < 50) ? pts.slice(1) : pts;
+  return h('div', { class: 'note' },
+    h('div', { class: 'row' }, h('b', null, `From ${k.file}:`), h('button', { class: 'small', onclick: () => { ui.kmlImport = null; render(); } }, '✕')),
+    k.items.map(it => h('div', { class: 'row', style: 'margin-top:4px' },
+      h('span', { style: 'flex:1' }, `${it.name} · ${it.kind === 'point' ? 'point' : `${it.kind} (${it.pts.length} pts)`}`),
+      it.kind === 'point' ? [
+        h('button', { class: 'small', onclick: () => { t.route.push(...toPts(it, true)); commit(); } }, 'Add as waypoint'),
+        h('button', { class: 'small', onclick: () => { Object.assign(t, { lat: it.pts[0].lat, lon: it.pts[0].lon }); commit(); } }, 'Use as launch point'),
+      ] : [
+        h('button', { class: 'small', onclick: () => { t.route = dropLaunch(toPts(it, true)); ui.kmlImport = null; commit(); } }, 'Use as route'),
+        h('button', { class: 'small', onclick: () => { t.pilotTrack = dropLaunch(toPts(it, false)); ui.kmlImport = null; commit(); } }, 'Use as pilot movement'),
+      ])),
+    h('div', { class: 'muted small-text', style: 'margin-top:4px' }, 'Heights are taken from the team\'s flying height (ATAK altitudes are ignored); adjust each waypoint\'s AGL after importing.'));
+}
+
+function importKml(t) {
+  const inp = h('input', { type: 'file', accept: '.kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz' });
+  inp.onchange = async () => {
+    const f = inp.files[0];
+    if (!f) return;
+    try { ui.kmlImport = { teamId: t.id, file: f.name, items: await readKmlFile(f) }; render(); } catch (e) { alert(`${f.name}: ${e.message}`); }
+  };
+  inp.click();
+}
+
+function routeSection(t) {
+  const path = flightPath(t, null);
+  const summary = t.route.length ? `${t.route.length} waypoint${t.route.length === 1 ? '' : 's'} · ${fmtDist(path?.length ?? 0)}${t.rtl !== false ? ' · returns to launch' : ''}` : 'none — aircraft fly anywhere in the radius';
+  return h('div', null,
+    h('div', { class: 'section-label' }, `Route (${summary})`),
+    t.route.map((w, i) => pointRow(t, 'route', w, i)),
+    h('div', { class: 'row' },
+      h('button', { class: 'small', disabled: t.lat == null || null, onclick: () => startDraw(t, 'route') }, '✏️ Draw on map'),
+      h('button', { class: 'small', onclick: () => { const w = { id: uid('w'), lat: null, lon: null, altM: t.route[t.route.length - 1]?.altM ?? t.altM }; t.route.push(w); ui.focusCoord = w.id; commit(); } }, '+ Waypoint'),
+      h('button', { class: 'small', onclick: () => importKml(t) }, 'Import from ATAK (KML/KMZ)')),
+    kmlChooser(t),
+    t.route.length ? h('div', { class: 'row', style: 'margin-top:6px' },
+      chk('Return to launch at the end', t, 'rtl'),
+      h('label', { class: 'f', title: 'How far aircraft may stray either side of the route (used for interference)' }, 'Corridor ± m',
+        h('input', { type: 'number', min: 0, value: t.corridorM ?? 150, style: 'width:80px', onchange: e => { t.corridorM = Number(e.target.value) || 0; commit(); } }))) : null);
+}
+
+function pilotSection(t) {
+  const n = t.pilotTrack.length;
+  return h('div', null,
+    h('div', { class: 'section-label' }, `Pilot movement (${n ? `${n} position${n === 1 ? '' : 's'} after launch` : 'pilots stay at the launch point'})`),
+    t.pilotTrack.map((w, i) => pointRow(t, 'pilotTrack', w, i)),
+    n ? h('div', { class: 'muted small-text' }, 'Pilots start at the launch point and move through these positions in step with the aircraft along the route.') : null,
+    h('div', { class: 'row' },
+      h('button', { class: 'small', disabled: t.lat == null || null, onclick: () => startDraw(t, 'pilotTrack') }, '✏️ Draw on map'),
+      h('button', { class: 'small', onclick: () => { const w = { id: uid('w'), lat: null, lon: null }; t.pilotTrack.push(w); ui.focusCoord = w.id; commit(); } }, '+ Pilot position')));
 }
 
 function teamCard(t) {
@@ -337,12 +512,12 @@ function teamCard(t) {
     h('div', { class: 'card-head' },
       h('input', { type: 'color', value: t.color, style: 'width:34px;padding:0;min-height:26px', title: 'Team colour', onchange: e => { t.color = e.target.value; commit(true); } }),
       h('input', { class: 'grow', value: t.name, 'aria-label': 'Team name', onchange: e => { t.name = e.target.value; commit(true); } }),
-      h('button', { class: 'small danger', title: 'Delete team', onclick: () => { if (confirm(`Delete ${t.name} and its ${ds.length} aircraft?`)) { state.teams = state.teams.filter(x => x !== t); state.drones = state.drones.filter(d => d.teamId !== t.id); commit(); } } }, '✕')),
+      h('button', { class: 'small danger', title: `Delete ${t.name}`, 'aria-label': `Delete ${t.name}`, onclick: () => deleteTeam(t) }, '✕')),
     coordField('Launch point (pilots + takeoff)', t, `${t.name}'s launch point`, 'team'),
-    t.lat == null ? h('div', { class: 'warn-box' }, 'No launch point yet — this team is left out of the plan until it has one.')
+    t.lat == null ? h('div', { class: 'warn-box' }, 'Set the launch point: type an MGRS grid or lat/long above and press Enter, or press 📍 Map and tap the map. Until then this team is left out of the plan.')
       : h('div', { class: 'muted small-text' }, `${ds.length} aircraft · ${pilots} pilot${pilots === 1 ? '' : 's'}`),
     h('div', { class: 'grid' },
-      num('Flying radius (m)', t, 'radiusM', { min: 50, title: 'Furthest the drones go from the pilots' }),
+      num(t.route?.length ? 'Flying radius (m, unused with a route)' : 'Flying radius (m)', t, 'radiusM', { min: 50, title: 'Furthest the drones go from the pilots when there is no route' }),
       num('Flying height AGL (m)', t, 'altM', { min: 1 }),
       txt('Start time', t, 'start', { type: 'time' }),
       txt('End time', t, 'end', { type: 'time' })),
@@ -351,6 +526,8 @@ function teamCard(t) {
         num('Takeoff spacing (m)', t, 'launchSepM', { min: 2, title: 'Closest a teammate takes off or lands (at takeoff power) to another pilot\'s goggles' }),
         num('In-flight spacing (m)', t, 'flightSepM', { min: 2, title: 'Closest a teammate\'s airborne drone (at flight power) gets to another pilot\'s goggles' }),
         num('Pilot antenna height (m)', t, 'pilotHeightM', { min: 0.5 }))),
+    routeSection(t),
+    pilotSection(t),
     h('div', { class: 'section-label' }, `Aircraft (${ds.length})`),
     ds.length ? ds.map(droneRow) : h('div', { class: 'muted small-text' }, 'No aircraft yet.'),
     h('button', {
@@ -396,41 +573,21 @@ function renderTeamsTab() {
   return h('div', null, out);
 }
 
+function deleteTeam(t) {
+  state.teams = state.teams.filter(x => x !== t);
+  state.drones = state.drones.filter(d => d.teamId !== t.id);
+  if (ui.placing?.id === t.id) cancelPlacing();
+  if (ui.selectedTeam === t.id) ui.selectedTeam = null;
+  commit();
+}
+
+// New team appears inline at the bottom of the list with its launch point field focused.
 function addTeam() {
   const t = newTeam(state);
-  const name = h('input', { value: t.name, 'aria-label': 'Team name' });
-  const coord = h('input', { class: 'coord-input', placeholder: 'e.g. 11S KC 79808 48321  or  38.3560, -119.5200', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Launch point' });
-  const preview = h('div', { class: 'coord-preview' }, 'MGRS, decimal lat/long, or degrees-minutes-seconds (38°21\'22"N 119°31\'12"W).');
-  let parsed = null;
-  coord.oninput = () => {
-    const v = coord.value.trim();
-    parsed = null;
-    if (!v) { preview.className = 'coord-preview'; preview.textContent = ''; return; }
-    try {
-      parsed = parseCoord(v);
-      const far = farNote(parsed);
-      preview.className = `coord-preview ${far ? 'bad' : 'ok'}`;
-      preview.textContent = (parsed.kind === 'MGRS' ? `✓ MGRS → ${fmtLatLon(parsed.lat, parsed.lon)}` : `✓ lat/long → ${toMgrs(parsed.lat, parsed.lon) ?? 'outside MGRS area'}`) + far;
-    } catch (e) { preview.className = 'coord-preview bad'; preview.textContent = e.message; }
-  };
-  const create = () => { t.name = name.value.trim() || t.name; state.teams.push(t); ui.selectedTeam = t.id; $('#dlg').close(); };
-  const addBtn = h('button', {
-    class: 'primary', type: 'button', onclick: () => {
-      if (!parsed) { coord.oninput(); if (!parsed) { coord.focus(); preview.className = 'coord-preview bad'; preview.textContent ||= 'Enter a launch point, or use “Pick on map”.'; return; } }
-      Object.assign(t, { lat: parsed.lat, lon: parsed.lon });
-      create();
-      getMap().setView([t.lat, t.lon], Math.max(getMap().getZoom(), 13));
-      commit();
-    },
-  }, 'Add team');
-  coord.onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); addBtn.click(); } };
-  dialog('Add team', h('div', null,
-    h('label', { class: 'f' }, 'Team name', name),
-    h('label', { class: 'f', style: 'margin-top:10px' }, 'Launch point', coord), preview,
-    h('div', { class: 'muted small-text', style: 'margin-top:8px' }, 'The launch point is where the team\'s pilots stand and their aircraft take off.')), [
-    h('button', { type: 'button', onclick: () => { create(); save(state); render(); startPlacing('team', t.id, `${t.name}'s launch point`); } }, '📍 Pick on map'),
-    addBtn]);
-  setTimeout(() => coord.focus(), 50);
+  state.teams.push(t);
+  ui.selectedTeam = t.id;
+  ui.focusCoord = t.id;
+  commit();
 }
 
 function contribText(c, nodes, ni) {
@@ -465,6 +622,46 @@ function spectrumSvg(scn, ev) {
   }
   parts.push('</svg>');
   return h('div', { html: parts.join('') });
+}
+
+function profileSvg(lp, color) {
+  const W = 460, H = 96, pad = 22;
+  const vals = lp.samples.filter(s => !s.loiter).map(s => s.dbm);
+  // keep the scale readable: ignore the moments the aircraft is right over the pilots, floor deep blockage
+  const lo = Math.max(lp.threshold - 30, Math.min(lp.threshold - 6, ...vals)), hi = Math.min(lp.threshold + 40, Math.max(lp.threshold + 6, ...vals));
+  const x = a => pad + (a / (lp.length || 1)) * (W - pad - 4), y = v => 6 + (hi - v) / (hi - lo || 1) * (H - 24);
+  const clip = v => Math.min(hi, Math.max(lo, v));
+  const line = lp.samples.filter(s => !s.loiter).map((s, i) => `${i ? 'L' : 'M'}${x(s.along).toFixed(1)},${y(clip(s.dbm)).toFixed(1)}`).join('');
+  const blocked = lp.runs.map(r => `<rect x="${x(r.from)}" y="4" width="${Math.max(2, x(r.to) - x(r.from))}" height="${H - 20}" fill="#c62828" fill-opacity=".18"/>`).join('');
+  return h('div', { html: `<svg class="spectrum" viewBox="0 0 ${W} ${H}" role="img" aria-label="Video signal along route">
+    ${blocked}
+    <line x1="${pad}" x2="${W - 4}" y1="${y(lp.threshold)}" y2="${y(lp.threshold)}" stroke="#c62828" stroke-dasharray="4 3" stroke-width="1"/>
+    <text x="${W - 6}" y="${y(lp.threshold) - 3}" font-size="9" text-anchor="end" fill="#c62828">picture breaks up</text>
+    <path d="${line}" fill="none" stroke="${color}" stroke-width="2"/>
+    <text x="${pad}" y="${H - 4}" font-size="9" fill="currentColor" fill-opacity=".6">0</text>
+    <text x="${W - 4}" y="${H - 4}" font-size="9" text-anchor="end" fill="currentColor" fill-opacity=".6">${fmtDist(lp.length)}</text>
+    <text x="2" y="${y(hi) + 8}" font-size="9" fill="currentColor" fill-opacity=".6">${Math.round(hi)}</text>
+    <text x="2" y="${y(lo)}" font-size="9" fill="currentColor" fill-opacity=".6">${Math.round(lo)}</text></svg>` });
+}
+
+function linkSection(scn) {
+  const items = scn.nodes.map((n, i) => ({ n, lp: plan.profiles?.[i] })).filter(x => x.lp);
+  if (!items.length) return [];
+  const out = [h('h3', null, 'Video link along routes')];
+  out.push(h('div', { class: 'muted small-text' }, 'Each aircraft\'s own video signal along its route, with terrain between it and the pilots (pilots moving in step if they have a pilot track). Red bands are where a ridge blocks the line of sight.'));
+  for (const { n, lp } of items) {
+    const low = lp.samples.filter(s => !s.loiter && s.dbm < lp.threshold).length;
+    out.push(h('div', { class: 'card' },
+      h('div', { class: 'row' }, h('span', { class: 'swatch', style: `background:${n.team.color}` }), h('b', null, n.drone.callsign), n.drone.pilot ? h('span', { class: 'muted' }, n.drone.pilot) : null,
+        h('span', { class: `st ${lp.runs.length || lp.loiterBlocked ? 'bad' : low ? 'warn' : 'good'}` }, lp.runs.length || lp.loiterBlocked ? 'terrain blocks video' : low ? 'weak in places' : 'clear')),
+      profileSvg(lp, n.team.color),
+      !lp.terrain ? h('div', { class: 'muted small-text' }, 'Terrain not loaded for the whole route — blocked sections may be missing.') : null,
+      lp.runs.map(r => h('div', { class: 'warn-box row' },
+        h('span', { style: 'flex:1' }, `Blocked ${fmtDist(r.from)}–${fmtDist(r.to)} along the route. ${r.minAgl ? `Needs about ${r.minAgl} m AGL there to see the pilots` : 'Not visible even at 1000 m AGL'}, or move the pilots.`),
+        h('button', { class: 'small', onclick: () => getMap().setView([r.lat, r.lon], 14) }, 'Show'))),
+      lp.loiterBlocked ? h('div', { class: 'warn-box' }, `Part of the loiter circle around the target is hidden from the pilots by terrain (${lp.loiterBlocked} of 8 points).`) : null));
+  }
+  return out;
 }
 
 function renderResultsTab() {
@@ -524,6 +721,7 @@ function renderResultsTab() {
   const imd = [];
   scn.nodes.forEach((n, i) => ev.res[i].contrib?.filter(c => c.kind === 'imd' && c.I > n.noiseDbm - 6).forEach(c => imd.push(`${n.drone.callsign} ← IMD from ${scn.nodes[c.j].drone.callsign}+${scn.nodes[c.k].drone.callsign} at ${Math.round(c.f)} MHz (${c.I.toFixed(0)} dBm)`)));
   if (imd.length) { out.push(h('h3', null, 'Intermodulation')); imd.slice(0, 20).forEach(t => out.push(h('div', { class: 'warn-box' }, t))); }
+  out.push(...linkSection(scn));
   if (terrainMsg) out.push(h('div', { class: 'note' }, terrainMsg));
   return h('div', null, out);
 }
@@ -560,7 +758,7 @@ function renderEnvTab() {
   for (const e of state.emitters) {
     out.push(h('div', { class: 'card' },
       h('div', { class: 'card-head' }, h('input', { class: 'grow', value: e.name, onchange: ev => { e.name = ev.target.value; commit(); } }),
-        h('button', { class: 'small danger', onclick: () => { state.emitters = state.emitters.filter(x => x !== e); commit(); } }, '✕')),
+        h('button', { class: 'small danger', title: `Delete ${e.name}`, 'aria-label': `Delete ${e.name}`, onclick: () => { state.emitters = state.emitters.filter(x => x !== e); if (ui.placing?.id === e.id) cancelPlacing(); commit(); } }, '✕')),
       coordField('Location', e, e.name, 'emitter'),
       h('div', { class: 'grid' }, num('Center freq (MHz)', e, 'freqMHz'), num('Bandwidth (MHz)', e, 'bwMHz'), num('EIRP (dBm)', e, 'eirpDbm'), num('Height AGL (m)', e, 'heightM'))));
   }
@@ -675,6 +873,7 @@ $('#menu').onclick = e => {
   if (act === 'save') downloadText(`${state.mission.name.replace(/[^\w-]+/g, '_')}.fpvplan.json`, JSON.stringify(state, null, 1));
   if (act === 'card') printCard();
   if (act === 'cli') cliDialog();
+  if (act === 'kml') downloadText(`${state.mission.name.replace(/[^\w-]+/g, '_')}.kml`, toKml(state), 'application/vnd.google-earth.kml+xml');
   if (act === 'cache') cacheDialog();
   if (act === 'help') helpDialog();
   if (act === 'manual') window.open('manual.html', '_blank');
