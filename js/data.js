@@ -19,11 +19,23 @@ const TEMPLATE_NOTE = 'Approximate preset — paste this unit\'s Betaflight `vtx
 
 export const VTX_PRESETS = [
   { brand: 'TBS', model: 'Unify Pro32 HV', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 3, bands: bands('A', 'B', 'E', 'F', 'R'), powers: pw(25, 200, 500, 1000) },
+  {
+    brand: 'TBS', model: 'Unify Pro32 DP', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 3, bands: bands('A', 'B', 'E', 'F', 'R'), powers: pw(25, 100, 200, 400, 500, 1000),
+    note: 'SmartAudio 2.1. Marketed as 3 W; retailer power tables top out around 1 W plus a "Max" level. Upload this unit\'s vtxtable to get its real levels.',
+  },
   { brand: 'TBS', model: 'Unify Pro32 Nano', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 3, bands: bands('A', 'B', 'E', 'F', 'R'), powers: pw(25, 100, 200, 400) },
   { brand: 'RushFPV', model: 'Tank Ultimate Plus', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 3, bands: bands('A', 'B', 'E', 'F', 'R', 'L'), powers: pw(25, 400, 800) },
   { brand: 'RushFPV', model: 'Max Solo 1.6W', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 3, bands: bands('A', 'B', 'E', 'F', 'R', 'L'), powers: pw(25, 400, 800, 1600) },
   { brand: 'Foxeer', model: 'Reaper Extreme 2.5W', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 4, bands: bands('A', 'B', 'E', 'F', 'R'), powers: pw(25, 200, 500, 1500, 2500) },
   { brand: 'Foxeer', model: 'Reaper Nano 350mW', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 4, bands: bands('A', 'B', 'E', 'F', 'R'), powers: pw(25, 200, 350) },
+  {
+    brand: 'GEPRC', model: 'MATEN 2.5W VTX PRO', type: 'analog', protocol: 'Tramp', bandwidthMHz: 18, freqTolMHz: 4, bands: bands('A', 'B', 'E', 'F', 'R', 'L'), powers: pw(25, 200, 600, 1600, 2500),
+    note: 'IRC Tramp control. 25/200/600/1600/2500 mW + pit mode. Unit lists 72 channels; this template has the standard 48 — upload the unit\'s vtxtable for the rest.',
+  },
+  {
+    brand: 'GEPRC', model: 'MATEN 5W VTX PRO', type: 'analog', protocol: 'Tramp', bandwidthMHz: 18, freqTolMHz: 4, bands: bands('A', 'B', 'E', 'F', 'R', 'L'), powers: pw(300, 600, 1600, 3000, 5000),
+    note: 'IRC Tramp control. Lowest power is 300 mW (plus pit mode) — there is no 25 mW takeoff level. 80 channels from 4.9–5.8 GHz on the unit; upload its vtxtable to use the 4.9 GHz channels.',
+  },
   { brand: 'GEPRC', model: '5.8G 1.6W (template)', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 4, bands: bands('A', 'B', 'E', 'F', 'R', 'L'), powers: pw(25, 200, 400, 800, 1600) },
   { brand: 'GEPRC', model: '5.8G 800mW (template)', type: 'analog', protocol: 'SmartAudio', bandwidthMHz: 18, freqTolMHz: 4, bands: bands('A', 'B', 'E', 'F', 'R'), powers: pw(25, 200, 400, 800) },
   { brand: 'Fatshark', model: 'Legacy 600mW (F band, template)', type: 'analog', protocol: 'None', bandwidthMHz: 18, freqTolMHz: 5, bands: bands('F'), powers: pw(600) },
@@ -66,9 +78,15 @@ export const RECEIVER_PRESETS = [
   { name: 'TBS Fusion', type: 'analog', ranges: [[5300, 6000]], noiseFigureDb: 7, selectivity: 'improved', iip3Dbm: -12, reqSirDb: 12, reqSnrDb: 6 },
   { name: 'Skyzone SteadyView', type: 'analog', ranges: [[5300, 6000]], noiseFigureDb: 8, selectivity: 'standard', iip3Dbm: -14, reqSirDb: 13, reqSnrDb: 6 },
   { name: 'Fatshark goggle + stock module', type: 'analog', ranges: [[5640, 5950]], noiseFigureDb: 9, selectivity: 'standard', iip3Dbm: -15, reqSirDb: 15, reqSnrDb: 6 },
+  { name: 'HDZero Goggle 2 · HDZero RX · omni', type: 'digital', ranges: [[5300, 6000]], noiseFigureDb: 6, selectivity: 'digital', iip3Dbm: -10, reqSirDb: 8, reqSnrDb: 5, antennaGainDbi: 3 },
+  { name: 'HDZero Goggle 2 · HDZero RX · patch', type: 'digital', ranges: [[5300, 6000]], noiseFigureDb: 6, selectivity: 'digital', iip3Dbm: -10, reqSirDb: 8, reqSnrDb: 5, antennaGainDbi: 7 },
+  { name: 'HDZero Goggle 2 · analog RX · omni', type: 'analog', ranges: [[5300, 6000]], noiseFigureDb: 8, selectivity: 'standard', iip3Dbm: -14, reqSirDb: 13, reqSnrDb: 6, antennaGainDbi: 3 },
+  { name: 'HDZero Goggle 2 · analog RX · patch', type: 'analog', ranges: [[5300, 6000]], noiseFigureDb: 8, selectivity: 'standard', iip3Dbm: -14, reqSirDb: 13, reqSnrDb: 6, antennaGainDbi: 7 },
   { name: 'HDZero Goggle (digital RX)', type: 'digital', ranges: [[5300, 6000]], noiseFigureDb: 6, selectivity: 'digital', iip3Dbm: -10, reqSirDb: 8, reqSnrDb: 5 },
   { name: 'Generic 1.3 GHz analog RX', type: 'analog', ranges: [[1000, 1400]], noiseFigureDb: 8, selectivity: 'standard', iip3Dbm: -15, reqSirDb: 15, reqSnrDb: 6 },
-].map(r => ({ ...r, note: 'Selectivity, NF and IIP3 are estimates — tune from field experience.' }));
+].map(r => ({ ...r, note: r.name.startsWith('HDZero Goggle 2')
+  ? 'Built-in analog and HDZero receivers share one antenna input (no analog diversity without a module). Antenna gain from the HDZero Echo kit: patch ≈7 dBi, omni ≈3 dBi. Selectivity, NF and IIP3 are estimates.'
+  : 'Selectivity, NF and IIP3 are estimates — tune from field experience.' }));
 
 export const ANTENNAS = [
   { name: 'Omni 2 dBi', gainDbi: 2 },

@@ -12,23 +12,30 @@ const xmlEsc = s => String(s ?? '').replace(/[<>&"']/g, c => ({ '<': '&lt;', '>'
 export function missionItems(team, drone) {
   const path = flightPath(team, drone);
   if (!path) return null;
-  const homeElev = elevationAt(team.lat, team.lon);
+  const home = path.start;
+  const homeElev = elevationAt(home.lat, home.lon);
   let terrainOk = homeElev != null;
-  const rel = p => {
+  const rel = (p, agl) => {
     const e = elevationAt(p.lat, p.lon);
-    if (e == null || homeElev == null) { terrainOk = false; return r1(p.alt); }
-    return r1(e + p.alt - homeElev);
+    if (e == null || homeElev == null) { terrainOk = false; return r1(agl); }
+    return r1(e + agl - homeElev);
   };
-  const items = [{ type: 'takeoff', alt: rel({ ...team, alt: path.pts[1]?.alt ?? team.altM }) }];
+  const items = [{ type: 'takeoff', alt: rel(home, path.pts[1]?.alt ?? team.altM) }];
   for (const p of path.pts.slice(1)) {
-    if (p.kind === 'wp') items.push({ type: 'waypoint', lat: p.lat, lon: p.lon, alt: rel(p), name: `WP${p.n}` });
-    else if (p.kind === 'target') {
-      const t = drone.target;
-      if ((t.loiterMin ?? 0) > 0) items.push({ type: 'loiter', lat: p.lat, lon: p.lon, alt: rel(p), seconds: Math.round(t.loiterMin * 60), radius: t.loiterM ?? 0, name: 'Target' });
-      else items.push({ type: 'waypoint', lat: p.lat, lon: p.lon, alt: rel(p), name: 'Target' });
-    } else if (p.kind === 'rtl') items.push({ type: 'rtl' });
+    const name = p.ref?.name;
+    if (p.kind === 'wp') items.push({ type: 'waypoint', lat: p.lat, lon: p.lon, alt: rel(p, p.alt), name: name || `WP${p.n}` });
+    else if (p.kind === 'loiter') {
+      const sec = Math.round((p.ref.loiterMin ?? 0) * 60);
+      items.push(sec > 0 ? { type: 'loiter', lat: p.lat, lon: p.lon, alt: rel(p, p.alt), seconds: sec, radius: p.ref.loiterM ?? 0, name: `Loiter ${p.n}` }
+        : { type: 'waypoint', lat: p.lat, lon: p.lon, alt: rel(p, p.alt), name: `WP${p.n}` });
+    } else if (p.kind === 'target') {
+      const t = drone.target, sec = Math.round((t.loiterMin ?? 0) * 60);
+      items.push(sec > 0 ? { type: 'loiter', lat: p.lat, lon: p.lon, alt: rel(p, p.alt), seconds: sec, radius: t.loiterM ?? 0, name: 'Target' }
+        : { type: 'waypoint', lat: p.lat, lon: p.lon, alt: rel(p, p.alt), name: 'Target' });
+    } else if (p.kind === 'land') items.push({ type: 'land', lat: p.lat, lon: p.lon, alt: rel(p, 0), name: 'Land' });
+    else if (p.kind === 'rtl') items.push({ type: 'rtl' });
   }
-  return { items, home: { lat: team.lat, lon: team.lon, amsl: homeElev ?? 0 }, terrainOk };
+  return { items, home: { lat: home.lat, lon: home.lon, amsl: homeElev ?? 0 }, terrainOk, launchAway: !!path.pts[0].ref };
 }
 
 // ArduPilot / Mission Planner "QGC WPL 110" (tab-separated; row 0 is home, absolute altitude).
@@ -40,6 +47,7 @@ export function toWaypointsFile(m) {
     if (it.type === 'takeoff') row(22, 3, [0, 0, 0, 0], 0, 0, it.alt);
     else if (it.type === 'waypoint') row(16, 3, [0, 0, 0, 0], it.lat, it.lon, it.alt);
     else if (it.type === 'loiter') row(19, 3, [it.seconds, 0, it.radius, 0], it.lat, it.lon, it.alt);
+    else if (it.type === 'land') row(21, 3, [0, 0, 0, 0], it.lat, it.lon, 0);
     else if (it.type === 'rtl') row(20, 3, [0, 0, 0, 0], 0, 0, 0);
   }
   return rows.join('\n') + '\n';
@@ -53,6 +61,7 @@ export function toQgcPlan(m) {
     if (it.type === 'takeoff') return item(22, [0, 0, 0, null, n7(m.home.lat), n7(m.home.lon), it.alt], it.alt);
     if (it.type === 'waypoint') return item(16, [0, 0, 0, null, n7(it.lat), n7(it.lon), it.alt], it.alt);
     if (it.type === 'loiter') return item(19, [it.seconds, 0, it.radius, null, n7(it.lat), n7(it.lon), it.alt], it.alt);
+    if (it.type === 'land') return item(21, [0, 0, 0, null, n7(it.lat), n7(it.lon), 0], 0);
     return item(20, [0, 0, 0, 0, 0, 0, 0], 0);
   });
   return JSON.stringify({
@@ -70,6 +79,7 @@ export function toInavMission(m) {
     const a = { no: k + 1, action: 'WAYPOINT', lat: 0, lon: 0, alt: 0, parameter1: 0, parameter2: 0, parameter3: 0, flag: last };
     if (it.type === 'waypoint') Object.assign(a, { lat: f7(it.lat), lon: f7(it.lon), alt: Math.round(it.alt) });
     else if (it.type === 'loiter') Object.assign(a, { action: 'POSHOLD_TIME', lat: f7(it.lat), lon: f7(it.lon), alt: Math.round(it.alt), parameter1: it.seconds });
+    else if (it.type === 'land') Object.assign(a, { action: 'LAND', lat: f7(it.lat), lon: f7(it.lon), alt: Math.round(it.alt) });
     else if (it.type === 'rtl') Object.assign(a, { action: 'RTH' });
     return `  <missionitem ${Object.entries(a).map(([k2, v]) => `${k2}="${v}"`).join(' ')}></missionitem>`;
   });
@@ -83,7 +93,7 @@ ${lines.join('\n')}
 }
 
 // Whole plan as KML (ATAK, Google Earth). KML colours are aabbggrr.
-export function toKml(state) {
+export function toKml(state, onlyTeamId = null) {
   const kcol = hex => { const h = hex.replace('#', ''); return `ff${h.slice(4, 6)}${h.slice(2, 4)}${h.slice(0, 2)}`; };
   const coord = (p, alt = 0) => `${p.lon.toFixed(7)},${p.lat.toFixed(7)},${Math.round(alt)}`;
   const out = [`<?xml version="1.0" encoding="UTF-8"?>`, `<kml xmlns="http://www.opengis.net/kml/2.2"><Document><name>${xmlEsc(state.mission.name)}</name>`];
@@ -92,17 +102,18 @@ export function toKml(state) {
       `<Style id="p${i}"><LineStyle><color>${kcol(t.color)}</color><width>2</width></LineStyle></Style>`);
   });
   state.teams.forEach((t, i) => {
-    if (t.lat == null) return;
+    if (t.lat == null || (onlyTeamId && t.id !== onlyTeamId)) return;
     const ds = state.drones.filter(d => d.teamId === t.id && d.active);
     const chans = ds.map(d => {
       const f = d.assign ? d.vtx.bands[d.assign.bandIdx]?.freqs[d.assign.chIdx] : null;
       return `${d.callsign}${d.pilot ? ` (${d.pilot})` : ''}: ${f ? `${chanName(d.vtx, d.assign.bandIdx, d.assign.chIdx)} ${f} MHz` : 'unassigned'}`;
     }).join('\n');
     out.push(`<Folder><name>${xmlEsc(t.name)}</name>`);
-    out.push(`<Placemark><name>${xmlEsc(t.name)} launch</name><description>${xmlEsc(`${toMgrs(t.lat, t.lon) ?? ''}\n${chans}`)}</description><styleUrl>#t${i}</styleUrl><Point><coordinates>${coord(t)}</coordinates></Point></Placemark>`);
+    out.push(`<Placemark><name>${xmlEsc(t.name)} pilots</name><description>${xmlEsc(`${toMgrs(t.lat, t.lon) ?? ''}\n${chans}`)}</description><styleUrl>#t${i}</styleUrl><Point><coordinates>${coord(t)}</coordinates></Point></Placemark>`);
     const path = flightPath(t, null);
     if (path) out.push(`<Placemark><name>${xmlEsc(t.name)} route</name><styleUrl>#t${i}</styleUrl><LineString><altitudeMode>relativeToGround</altitudeMode><coordinates>${path.pts.map(p => coord(p, p.alt)).join(' ')}</coordinates></LineString></Placemark>`);
-    (t.route || []).forEach((w, k) => w.lat != null && out.push(`<Placemark><name>${xmlEsc(t.name)} WP${k + 1}</name><styleUrl>#t${i}</styleUrl><Point><altitudeMode>relativeToGround</altitudeMode><coordinates>${coord(w, w.altM ?? t.altM)}</coordinates></Point></Placemark>`));
+    const label = (w, k) => w.type === 'launch' ? 'Launch' : w.type === 'land' ? 'Land' : w.type === 'loiter' ? `Loiter ${k + 1}${w.loiterMin ? ` (${w.loiterMin} min)` : ''}` : `WP${k + 1}`;
+    (t.route || []).forEach((w, k) => w.lat != null && out.push(`<Placemark><name>${xmlEsc(t.name)} ${xmlEsc(label(w, k))}</name><description>${xmlEsc(`${toMgrs(w.lat, w.lon) ?? ''} · ${w.altM ?? t.altM} m AGL`)}</description><styleUrl>#t${i}</styleUrl><Point><altitudeMode>relativeToGround</altitudeMode><coordinates>${coord(w, w.altM ?? t.altM)}</coordinates></Point></Placemark>`));
     const track = (t.pilotTrack || []).filter(p => p.lat != null);
     if (track.length) out.push(`<Placemark><name>${xmlEsc(t.name)} pilot movement</name><styleUrl>#p${i}</styleUrl><LineString><tessellate>1</tessellate><coordinates>${[t, ...track].map(p => coord(p)).join(' ')}</coordinates></LineString></Placemark>`);
     for (const d of ds) {

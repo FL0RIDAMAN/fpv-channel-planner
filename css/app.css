@@ -149,3 +149,13 @@ label.f input { width: 100%; }
 .wp-dot { width: 20px; height: 20px; border-radius: 50%; color: #fff; font: 700 11px/20px system-ui, sans-serif; text-align: center; border: 2px solid #fff; box-shadow: 0 0 0 1px #0007; }
 .pilot-dot { width: 22px; height: 22px; border-radius: 4px; background: #fff; color: #111; font: 700 10px/18px system-ui, sans-serif; text-align: center; border: 2px solid; box-shadow: 0 0 0 1px #0005; }
 .tgt-dot { font: 700 24px/26px system-ui, sans-serif; text-align: center; text-shadow: 0 0 3px #fff, 0 0 3px #fff; }
+
+.wp-side { flex-wrap: wrap; justify-content: flex-end; }
+.wp-dot.launch, .wp-dot.land { border-radius: 4px; }
+.wp-row.wp-launch .f-label, .wp-row.wp-land .f-label { font-weight: 700; color: var(--ink); }
+/* each route point: coordinates on top, its controls on a line underneath */
+.wp-row { flex-direction: column; gap: 0; border-left: 3px solid var(--line); padding-left: 8px; margin-bottom: 8px; }
+.wp-row .coord-field { width: 100%; margin-bottom: 4px; }
+.wp-side { padding-top: 0; justify-content: flex-start; align-items: flex-end; }
+.wp-row.wp-launch, .wp-row.wp-land { border-left-color: var(--accent); }
+.wp-row.wp-loiter { border-left-color: var(--warn); }

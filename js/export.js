@@ -90,7 +90,7 @@ export function channelCardHtml(state, plan, siteName) {
     if (!ds.length) continue;
     html += `<div class="team-block"><h3>${esc(t.name)}</h3><div>Launch point <b>${t.lat != null ? (toMgrs(t.lat, t.lon) ?? '') : 'not set'}</b>${t.lat != null ? ` (${t.lat.toFixed(5)}, ${t.lon.toFixed(5)})` : ''} · radius ${t.radiusM} m · ${t.altM} m AGL${t.start ? ` · ${t.start}–${t.end}` : ''}</div>`;
     const rt = (t.route || []).filter(w => w.lat != null);
-    if (rt.length) html += `<div>Route: ${rt.map((w, k) => `WP${k + 1} ${toMgrs(w.lat, w.lon) ?? ''} @ ${w.altM ?? t.altM} m AGL`).join(' → ')}${t.rtl !== false ? ' → RTL' : ''}</div>`;
+    if (rt.length) html += `<div>Route: ${rt.map((w, k) => `${w.type === 'launch' ? 'Launch' : w.type === 'land' ? 'Land' : w.type === 'loiter' ? `Loiter${w.loiterMin ? ` ${w.loiterMin} min` : ''}` : `WP${k + 1}`} ${toMgrs(w.lat, w.lon) ?? ''}${w.type === 'land' ? '' : ` @ ${w.altM ?? t.altM} m AGL`}`).join(' → ')}${t.rtl !== false && !rt.some(w => w.type === 'land') ? ' → RTL' : ''}</div>`;
     const pt = (t.pilotTrack || []).filter(w => w.lat != null);
     if (pt.length) html += `<div>Pilot movement: ${pt.map(w => toMgrs(w.lat, w.lon) ?? '').join(' → ')}</div>`;
     const tg = ds.filter(d => d.target?.lat != null);

@@ -121,6 +121,13 @@
 
 <p>The map draws a line between each pair of teams showing the distance and the worst-case terrain effect: <span style="color:#c62828">red solid = clear line-of-sight</span>, <span style="color:#b06a00">amber dashed = partly shielded</span>, <span style="color:#1a7f37">green dashed = well shielded (&gt;20 dB)</span>. The <b>Team separation</b> table at the bottom of the tab shows both directions.</p>
 
+<h3>Equipment notes</h3>
+<ul>
+  <li><b>GEPRC MATEN 2.5W / 5W VTX PRO</b> are IRC Tramp. The 5W's lowest level is 300 mW (plus pit mode), so it can't take off at 25 mW. With INAV, Tramp power tops out at 800 mW. With ArduPilot, power is capped at 1000 mW.</li>
+  <li><b>TBS Unify Pro32 DP</b> is SmartAudio 2.1. Upload its <code>vtxtable</code> to see its real power levels.</li>
+  <li><b>HDZero Goggle 2</b> has four entries: HDZero or analog receiver, each with omni or patch. Choosing one sets that aircraft's goggle antenna gain: omni ≈3 dBi, patch ≈7 dBi (HDZero Echo kit). The built-in analog and HDZero receivers share one antenna input, so there's no analog diversity without a module.</li>
+</ul>
+
 <h3 id="aircraft">Aircraft</h3>
 <p>Each aircraft is a single row: callsign, pilot, channel, takeoff → flight power, table status, and margin once solved. Tap the row to open it, and press <i>Done</i> to close it. Table status shows as <span style="background:var(--tip-bg);padding:0 6px;border-radius:8px">table ✓</span> once uploaded, or as <i>template</i> or <i>copied table</i> until then.</p>
 <table>
@@ -192,6 +199,15 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
   <li><b>+ Waypoint</b>: add a row and type its MGRS grid or lat/long (<a href="#coords">formats</a>), or press <i>📍 Map</i>.</li>
   <li><b>Import from ATAK (KML/KMZ)</b>: pick a file exported from ATAK, Google Earth or similar. The card lists what's in the file: use a line as the <i>route</i> or <i>pilot movement</i>, or add points as waypoints. Altitudes in the file are ignored, and each waypoint gets the team's flying height.</li>
   <li><b>AGL m</b> on each waypoint is the height above the ground there.</li>
+  <li><b>Type</b>: each route point can be set to one of these:
+    <ul>
+      <li><b>Waypoint</b>: fly through.</li>
+      <li><b>Launch (takeoff)</b>: the aircraft takes off here instead of at the pilots' position. It always moves to the top of the list.</li>
+      <li><b>Loiter / hold</b>: circle or hold for the minutes and radius you set.</li>
+      <li><b>Land</b>: the route ends with a landing here. It always moves to the bottom, and "Return to launch" is ignored.</li>
+    </ul>
+    On the map: ▲ launch, ⟳ loiter (with its circle), ▼ land.</li>
+  <li><b>Export route</b>: <i>Mission Planner</i> (<code>.waypoints</code>), <i>QGC</i> (<code>.plan</code>), <i>INAV</i> (<code>.mission</code>) or <i>ATAK</i> (<code>.kml</code>, just this team). These export the team route without any aircraft's target. Each aircraft's own mission, with its target, is in that aircraft's Mission section.</li>
   <li><b>Return to launch</b>: ends the route back at the launch point.</li>
   <li><b>Corridor ±</b>: how far aircraft may stray either side of the route. Used for interference.</li>
 </ul>
@@ -213,7 +229,8 @@ vtxtable powerlabels 25 200 500 1W</code></pre>
 </table>
 <p>What the mission contains:</p>
 <ul>
-  <li><b>Sequence:</b> takeoff (ArduPilot only), each waypoint, then the target. If the target has a loiter time, ArduPilot uses LOITER_TIME and INAV uses POSHOLD_TIME. Return to launch comes last if it's ticked.</li>
+  <li><b>Sequence:</b> takeoff (ArduPilot only), each waypoint or loiter, the target, then either a landing (NAV_LAND / INAV LAND) or return to launch. Loiters with a time use LOITER_TIME (ArduPilot) or POSHOLD_TIME (INAV).</li>
+  <li><b>Home:</b> the route's launch point if it has one, otherwise the team's pilot position. ArduPilot returns to where it armed.</li>
   <li><b>Heights:</b> written relative to home. The planner converts each waypoint's AGL using the terrain model, so the aircraft is at the planned height above the ground at every waypoint. A waypoint on a ridge 400 m above the launch point therefore shows up as about 460 m in the ground station.</li>
 </ul>
 <div class="warn">

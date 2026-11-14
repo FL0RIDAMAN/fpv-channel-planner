@@ -173,11 +173,13 @@ export function exampleMission(siteKey = 'mwtc') {
 }
 
 // Upgrade a saved mission (v1 kept a shared VTX library and a single power).
-// Fill in fields added after a mission was saved (routes, pilot tracks, targets).
+// Fill in fields added after a mission was saved (routes, pilot tracks, targets, new goggle presets).
 function normalize(s) {
+  for (const r of RECEIVER_PRESETS) if (!s.receivers.some(x => x.name === r.name)) s.receivers.push({ id: uid('rx'), ...clone(r) });
   for (const t of s.teams) {
     t.route ??= []; t.pilotTrack ??= []; t.rtl ??= true; t.corridorM ??= 150;
     for (const w of [...t.route, ...t.pilotTrack]) w.id ??= uid('w');
+    for (const w of t.route) w.type ??= 'wp';
   }
   for (const d of s.drones) { d.flightMode ??= 'manual'; d.target ??= null; if (d.target) d.target.id ??= uid('g'); }
   return s;

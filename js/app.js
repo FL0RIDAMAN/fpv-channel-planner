@@ -9,7 +9,7 @@ import { firmwareCommands, channelCardHtml, downloadText, powerLabel } from './e
 import { FIRMWARES, fwSupports } from './firmware.js';
 import { distM, fmtDist, tilesForBounds } from './geo.js';
 import { parseCoord, toMgrs, fmtLatLon } from './coords.js';
-import { flightPath } from './paths.js';
+import { flightPath, POINT_TYPES, pointTypeName, routeIssues } from './paths.js';
 import { missionItems, toWaypointsFile, toQgcPlan, toInavMission, toKml, readKmlFile } from './missions.js';
 
 // ---------- state ----------
@@ -377,7 +377,9 @@ function droneEditor(d, r) {
       sel('Flight controller', d, 'firmware', Object.entries(FIRMWARES).map(([k, f]) => [k, f.name]), {
         after: () => { const f = curFreq(d); if (f && !fwSupports(d.firmware, f)) { d.assign = null; d.locked = false; } },
       }),
-      sel('Goggles / receiver', d, 'receiverId', state.receivers.map(x => [x.id, x.name]))),
+      sel('Goggles / receiver', d, 'receiverId', state.receivers.map(x => [x.id, x.name]), {
+        after: () => { const r = byId(state.receivers, d.receiverId); if (r?.antennaGainDbi != null) d.rxGainDbi = r.antennaGainDbi; },
+      })),
     h('div', { class: 'section-label' }, 'VTX'),
     h('div', { class: 'grid' }, templateSelect(d)),
     tableStatus(d),
@@ -441,11 +443,33 @@ function droneRow(d) {
 
 function pointRow(t, list, w, i) {
   const isRoute = list === 'route';
-  return h('div', { class: 'wp-row' },
-    coordField(isRoute ? `WP${i + 1}` : `Pilot position ${i + 2}`, w, `${t.name} ${isRoute ? `WP${i + 1}` : `pilot position ${i + 2}`}`, 'point'),
+  const label = !isRoute ? `Pilot position ${i + 2}` : w.type === 'launch' ? 'Launch (takeoff)' : w.type === 'land' ? 'Land' : w.type === 'loiter' ? `Loiter ${i + 1}` : `WP${i + 1}`;
+  return h('div', { class: `wp-row ${isRoute ? `wp-${w.type || 'wp'}` : ''}` },
+    coordField(label, w, `${t.name} ${label}`, 'point'),
     h('div', { class: 'wp-side' },
-      isRoute ? h('label', { class: 'f' }, 'AGL m', h('input', { type: 'number', min: 1, value: w.altM ?? t.altM, style: 'width:70px', onchange: e => { w.altM = Number(e.target.value) || t.altM; commit(); } })) : null,
+      isRoute ? h('label', { class: 'f' }, 'Type', h('select', { style: 'width:120px', onchange: e => {
+        w.type = e.target.value;
+        if (w.type === 'loiter') { w.loiterM ??= 150; w.loiterMin ??= 5; }
+        if (w.type === 'launch' && i > 0) { t.route.splice(i, 1); t.route.unshift(w); }   // launch goes first
+        if (w.type === 'land' && i < t.route.length - 1) { t.route.splice(i, 1); t.route.push(w); } // land goes last
+        commit();
+      } }, POINT_TYPES.map(([v, l]) => h('option', { value: v, selected: (w.type || 'wp') === v || null }, l)))) : null,
+      isRoute && w.type !== 'land' ? h('label', { class: 'f' }, 'AGL m', h('input', { type: 'number', min: 1, value: w.altM ?? t.altM, style: 'width:70px', onchange: e => { w.altM = Number(e.target.value) || t.altM; commit(); } })) : null,
+      isRoute && w.type === 'loiter' ? [
+        h('label', { class: 'f' }, 'Min', h('input', { type: 'number', min: 0, step: 0.5, value: w.loiterMin ?? 0, style: 'width:60px', onchange: e => { w.loiterMin = Number(e.target.value) || 0; commit(); } })),
+        h('label', { class: 'f' }, 'Radius m', h('input', { type: 'number', min: 0, value: w.loiterM ?? 0, style: 'width:70px', onchange: e => { w.loiterM = Number(e.target.value) || 0; commit(); } }))] : null,
       h('button', { class: 'small danger', title: 'Remove', onclick: () => { t[list] = t[list].filter(x => x !== w); commit(); } }, '✕')));
+}
+
+function downloadTeamRoute(t, kind) {
+  if (kind === 'atak') { downloadText(`${t.name.replace(/[^\w-]+/g, '_')}.kml`, toKml(state, t.id), 'application/vnd.google-earth.kml+xml'); return; }
+  const m = missionItems(t, null);
+  if (!m) return;
+  if (!m.terrainOk && !confirm('Terrain data isn\'t loaded for every point, so some heights will be written as height above home instead of above the ground there. Download anyway?')) return;
+  const base = t.name.replace(/[^\w-]+/g, '_');
+  if (kind === 'waypoints') downloadText(`${base}.waypoints`, toWaypointsFile(m), 'text/plain');
+  if (kind === 'plan') downloadText(`${base}.plan`, toQgcPlan(m), 'application/json');
+  if (kind === 'inav') downloadText(`${base}.mission`, toInavMission(m), 'application/xml');
 }
 
 function kmlChooser(t) {
@@ -488,10 +512,16 @@ function routeSection(t) {
       h('button', { class: 'small', onclick: () => { const w = { id: uid('w'), lat: null, lon: null, altM: t.route[t.route.length - 1]?.altM ?? t.altM }; t.route.push(w); ui.focusCoord = w.id; commit(); } }, '+ Waypoint'),
       h('button', { class: 'small', onclick: () => importKml(t) }, 'Import from ATAK (KML/KMZ)')),
     kmlChooser(t),
+    routeIssues(t).map(m => h('div', { class: 'warn-box' }, m)),
     t.route.length ? h('div', { class: 'row', style: 'margin-top:6px' },
       chk('Return to launch at the end', t, 'rtl'),
       h('label', { class: 'f', title: 'How far aircraft may stray either side of the route (used for interference)' }, 'Corridor ± m',
-        h('input', { type: 'number', min: 0, value: t.corridorM ?? 150, style: 'width:80px', onchange: e => { t.corridorM = Number(e.target.value) || 0; commit(); } }))) : null);
+        h('input', { type: 'number', min: 0, value: t.corridorM ?? 150, style: 'width:80px', onchange: e => { t.corridorM = Number(e.target.value) || 0; commit(); } }))) : null,
+    t.route.some(w => w.lat != null) ? h('div', { class: 'row', style: 'margin-top:6px' }, h('span', { class: 'muted small-text' }, 'Export route:'),
+      h('button', { class: 'small', onclick: () => downloadTeamRoute(t, 'waypoints') }, '⬇ Mission Planner'),
+      h('button', { class: 'small', onclick: () => downloadTeamRoute(t, 'plan') }, '⬇ QGC'),
+      h('button', { class: 'small', onclick: () => downloadTeamRoute(t, 'inav') }, '⬇ INAV'),
+      h('button', { class: 'small', onclick: () => downloadTeamRoute(t, 'atak') }, '⬇ ATAK (KML)')) : null);
 }
 
 function pilotSection(t) {
@@ -659,7 +689,7 @@ function linkSection(scn) {
       lp.runs.map(r => h('div', { class: 'warn-box row' },
         h('span', { style: 'flex:1' }, `Blocked ${fmtDist(r.from)}–${fmtDist(r.to)} along the route. ${r.minAgl ? `Needs about ${r.minAgl} m AGL there to see the pilots` : 'Not visible even at 1000 m AGL'}, or move the pilots.`),
         h('button', { class: 'small', onclick: () => getMap().setView([r.lat, r.lon], 14) }, 'Show'))),
-      lp.loiterBlocked ? h('div', { class: 'warn-box' }, `Part of the loiter circle around the target is hidden from the pilots by terrain (${lp.loiterBlocked} of 8 points).`) : null));
+      lp.loiterBlocked ? h('div', { class: 'warn-box' }, `Part of a loiter circle is hidden from the pilots by terrain (${lp.loiterBlocked} point${lp.loiterBlocked === 1 ? '' : 's'}).`) : null));
   }
   return out;
 }
@@ -738,7 +768,9 @@ function renderEquipmentTab() {
         h('label', null, 'Tunable ranges (MHz)', h('input', { value: ranges.v, onchange: e => { r.ranges = e.target.value.split(',').map(s => s.split('-').map(Number)).filter(a => a.length === 2 && a.every(Number.isFinite)); commit(); } })),
         sel('Selectivity', r, 'selectivity', [['standard', 'Standard'], ['improved', 'Improved'], ['digital', 'Digital']]),
         num('Noise figure (dB)', r, 'noiseFigureDb'), num('IIP3 (dBm)', r, 'iip3Dbm'),
-        num('Required SIR (dB)', r, 'reqSirDb'), num('Required SNR (dB)', r, 'reqSnrDb')),
+        num('Required SIR (dB)', r, 'reqSirDb'), num('Required SNR (dB)', r, 'reqSnrDb'),
+        num('Antenna gain (dBi, blank = set per aircraft)', r, 'antennaGainDbi', { title: 'Applied to an aircraft\'s goggle antenna gain when this receiver is chosen' })),
+      r.note ? h('div', { class: 'note' }, r.note) : null,
       h('button', { class: 'small danger', disabled: state.drones.some(d => d.receiverId === r.id) || null, onclick: () => { state.receivers = state.receivers.filter(x => x !== r); commit(); } }, 'Delete')));
   }
   out.push(h('button', { onclick: () => { state.receivers.push({ id: uid('rx'), name: 'New receiver', type: 'analog', ranges: [[5300, 6000]], noiseFigureDb: 9, selectivity: 'standard', iip3Dbm: -15, reqSirDb: 15, reqSnrDb: 6 }); commit(); } }, '+ Receiver'));

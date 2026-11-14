@@ -3,21 +3,57 @@ import { distM, dest, bearing, lerp } from './geo.js';
 
 const pt = (p, alt) => ({ lat: p.lat, lon: p.lon, alt });
 
+export const POINT_TYPES = [
+  ['wp', 'Waypoint'], ['launch', 'Launch (takeoff)'], ['loiter', 'Loiter / hold'], ['land', 'Land'],
+];
+export const pointTypeName = t => (POINT_TYPES.find(x => x[0] === t) || POINT_TYPES[0])[1];
+
+// Route problems worth telling the user about.
+export function routeIssues(team) {
+  const r = (team.route || []).filter(w => w.lat != null), out = [];
+  r.forEach((w, i) => {
+    if (w.type === 'launch' && i > 0) out.push(`Point ${i + 1} is a launch point but isn't first — it's treated as a waypoint.`);
+    if (w.type === 'land' && i < r.length - 1) out.push(`Point ${i + 1} is a land point — the ${r.length - 1 - i} point(s) after it are ignored.`);
+  });
+  if (r.some(w => w.type === 'land') && team.rtl !== false) out.push('The route ends with a landing, so "Return to launch" is ignored.');
+  return out;
+}
+
 // Ordered 3-D path for an aircraft (alt = metres AGL), or null if it only has the team circle.
+// Route points can be typed: an optional first "launch" point (takeoff away from the pilots),
+// waypoints, loiter/hold points, and a "land" point that ends the route.
+// The aircraft's own target is flown after the route (before a landing, if there is one).
 export function flightPath(team, drone) {
   if (team.lat == null) return null;
-  const route = (team.route || []).filter(w => w.lat != null);
+  let route = (team.route || []).filter(w => w.lat != null);
   const tgt = drone?.target?.lat != null ? drone.target : null;
   if (!route.length && !tgt) return null;
+  const launch = route[0]?.type === 'launch' ? route[0] : null;
+  if (launch) route = route.slice(1);
+  const landIdx = route.findIndex(w => w.type === 'land');
+  const land = landIdx >= 0 ? route[landIdx] : null;
+  if (land) route = route.slice(0, landIdx);
+  const start = launch || team;
   const firstAlt = route[0]?.altM ?? tgt?.altM ?? team.altM;
-  const pts = [{ ...pt(team, firstAlt), kind: 'launch' }];
-  route.forEach((w, i) => pts.push({ ...pt(w, w.altM ?? team.altM), kind: 'wp', n: i + 1 }));
+  const pts = [{ ...pt(start, firstAlt), kind: 'launch', ref: launch }];
+  const loiters = [];
+  route.forEach((w, i) => {
+    const kind = w.type === 'loiter' ? 'loiter' : 'wp';
+    const p = { ...pt(w, w.altM ?? team.altM), kind, n: i + 1 + (launch ? 1 : 0), ref: w };
+    pts.push(p);
+    if (kind === 'loiter' && (w.loiterM ?? 0) > 0) loiters.push({ lat: w.lat, lon: w.lon, alt: p.alt, radius: w.loiterM, idx: pts.length - 1 });
+  });
   let targetIdx = -1;
-  if (tgt) { targetIdx = pts.length; pts.push({ ...pt(tgt, tgt.altM ?? team.altM), kind: 'target' }); }
-  if (team.rtl !== false) pts.push({ ...pt(team, pts[pts.length - 1].alt), kind: 'rtl' });
+  if (tgt) {
+    targetIdx = pts.length;
+    pts.push({ ...pt(tgt, tgt.altM ?? team.altM), kind: 'target' });
+    if ((tgt.loiterM ?? 0) > 0) loiters.push({ lat: tgt.lat, lon: tgt.lon, alt: tgt.altM ?? team.altM, radius: tgt.loiterM, idx: targetIdx });
+  }
+  if (land) pts.push({ ...pt(land, pts[pts.length - 1].alt), kind: 'land', ref: land });
+  else if (team.rtl !== false) pts.push({ ...pt(start, pts[pts.length - 1].alt), kind: 'rtl' });
   const cum = [0];
   for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + distM(pts[i - 1], pts[i]));
-  return { pts, cum, length: cum[cum.length - 1], targetIdx, loiterM: tgt ? (tgt.loiterM ?? 0) : 0, target: tgt };
+  return { pts, cum, length: cum[cum.length - 1], targetIdx, loiterM: tgt ? (tgt.loiterM ?? 0) : 0, target: tgt, loiters, start };
 }
 
 // Position at fraction f (0..1) of the path length.
@@ -66,7 +102,7 @@ export function flightSamples(path, corridorM = 150, n = 16) {
     if (corridorM > 0) for (const s of [-90, 90]) out.push({ ...dest(p, p.hdg + s, corridorM), alt: p.alt });
   }
   for (const p of path.pts) if (p.kind !== 'launch' && p.kind !== 'rtl') out.push(p);
-  if (path.target && path.loiterM > 0) for (let k = 0; k < 8; k++) out.push({ ...dest(path.target, k * 45, path.loiterM), alt: path.pts[path.targetIdx].alt });
+  for (const l of path.loiters || []) for (let k = 0; k < 8; k++) out.push({ ...dest(l, k * 45, l.radius), alt: l.alt });
   return out;
 }
 
@@ -78,9 +114,9 @@ export function syncedPairs(team, path, n = 80) {
     const f = k / n;
     out.push({ f, along: f * path.length, drone: pointAt(path, f), pilot: pilotAt(team, pilotFraction(path, f), pp) });
   }
-  if (path.targetIdx >= 0 && path.loiterM > 0) {
-    const f = path.cum[path.targetIdx] / (path.length || 1), pilot = pilotAt(team, pilotFraction(path, f), pp);
-    for (let k = 0; k < 8; k++) out.push({ f, along: path.cum[path.targetIdx], loiter: true, drone: { ...dest(path.target, k * 45, path.loiterM), alt: path.pts[path.targetIdx].alt }, pilot });
+  for (const l of path.loiters || []) {
+    const f = path.cum[l.idx] / (path.length || 1), pilot = pilotAt(team, pilotFraction(path, f), pp);
+    for (let k = 0; k < 8; k++) out.push({ f, along: path.cum[l.idx], loiter: true, drone: { ...dest(l, k * 45, l.radius), alt: l.alt }, pilot });
   }
   return out;
 }

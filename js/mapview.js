@@ -117,8 +117,11 @@ export function renderRoutes(state, plan, openDroneId) {
     if (path) L.polyline(path.pts.map(p => [p.lat, p.lon]), { color: t.color, weight: 3, opacity: 0.9, interactive: false }).addTo(layers.routes);
     (t.route || []).forEach((w, i) => {
       if (w.lat == null) return;
-      const m = L.marker([w.lat, w.lon], { draggable: true, icon: dot(`<div class="wp-dot" style="background:${t.color}">${i + 1}</div>`) }).addTo(layers.routes);
-      m.bindTooltip(`${t.name} WP${i + 1} · ${w.altM ?? t.altM} m AGL<br>${toMgrs(w.lat, w.lon) ?? ''}`);
+      const sym = w.type === 'launch' ? '▲' : w.type === 'land' ? '▼' : w.type === 'loiter' ? '⟳' : `${i + 1}`;
+      const name = w.type === 'launch' ? 'launch (takeoff)' : w.type === 'land' ? 'land' : w.type === 'loiter' ? `loiter ${i + 1}${w.loiterMin ? ` · ${w.loiterMin} min` : ''}` : `WP${i + 1}`;
+      const m = L.marker([w.lat, w.lon], { draggable: true, icon: dot(`<div class="wp-dot ${w.type || 'wp'}" style="background:${t.color}">${sym}</div>`) }).addTo(layers.routes);
+      m.bindTooltip(`${t.name} ${name}${w.type === 'land' ? '' : ` · ${w.altM ?? t.altM} m AGL`}<br>${toMgrs(w.lat, w.lon) ?? ''}`);
+      if (w.type === 'loiter' && (w.loiterM ?? 0) > 0) L.circle([w.lat, w.lon], { radius: w.loiterM, color: t.color, weight: 1.5, fillOpacity: 0.05, dashArray: '3 4', interactive: false }).addTo(layers.routes);
       drag(m, w.id);
     });
     const track = (t.pilotTrack || []).filter(p => p.lat != null);
